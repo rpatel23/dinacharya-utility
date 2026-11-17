@@ -10,6 +10,7 @@ Open `public/index.html` in a browser. Your data is saved in the browser automat
 - **Week view:** a table of the week with totals per habit. Click a day's header to open that day.
 - **Habits…:** try out config changes. What you save there is a local override on that device only (the status bar shows **Config: local**). **Use deployed** drops it.
 - **Config:** when served over http(s), the app loads `habits.yaml` from next to `index.html`, falls back to the last valid copy when offline, and keeps that copy if the file has an error (shown as **Config error** in the status bar). Opened from `file://`, it uses the copy embedded in `index.html`.
+- **Settings…:** turn on sync, either to a secret GitHub Gist or to the server's own `/api/data` (Cloudflare or Tailscale). The status bar shows the sync state; click it to sync now. See `docs/DEPLOYMENT.md`.
 - **Keys:** ← and → change the day, T jumps to today, W switches between Day and Week.
 
 ## Docs
@@ -20,7 +21,7 @@ Open `public/index.html` in a browser. Your data is saved in the browser automat
 
 ## Status
 
-v2 works as a standalone file and loads `habits.yaml` from the server. Sync and installing as a PWA are planned; see the roadmap in CLAUDE.md.
+The app works as a standalone file, loads `habits.yaml` from the server, and syncs across devices (data format v3, with timestamps for merging). Installing it as a PWA and the server files for each deployment option are next; see the roadmap in CLAUDE.md.
 
 ## License
 

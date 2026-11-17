@@ -65,6 +65,12 @@ table.wk{border-collapse:collapse;width:100%;min-width:360px}
 .status div{flex:1 1 0;min-width:0;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid;border-color:var(--sh) var(--hi) var(--hi) var(--sh)}
 .warn{color:#A00000}
 .status #sCfg.warn{flex-grow:3}
+.status #s3.click{cursor:pointer}
+.opt{display:flex;align-items:center;gap:4px;min-height:22px}
+.opt input{margin:0 2px 0 0}
+.frm{display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin:2px 0 4px 22px}
+.frm .field{min-width:0;width:100%}
+.hint{color:#505050;margin:0 0 2px 22px}
 dialog{padding:3px;width:min(600px,calc(100vw - 16px));background:var(--face);border:2px solid;border-color:var(--lt) var(--dk) var(--dk) var(--lt);box-shadow:inset 1px 1px var(--hi),inset -1px -1px var(--sh)}
 dialog::backdrop{background:rgba(0,0,0,.25)}
 dialog textarea{width:100%;height:60vh;font:11px/1.45 "Lucida Console",Consolas,monospace;white-space:pre;tab-size:2}
@@ -90,6 +96,7 @@ dialog textarea{width:100%;height:60vh;font:11px/1.45 "Lucida Console",Consolas,
     <button class="b" id="imp" title="Backup .json or config .yaml">Import…</button>
     <span class="sep"></span>
     <button class="b" id="edit">Habits…</button>
+    <button class="b" id="set">Settings…</button>
     <input type="file" id="file" accept=".json,.yaml,.yml,application/json,text/yaml" class="hide">
   </div>
   <div id="view"></div>
@@ -104,6 +111,24 @@ dialog textarea{width:100%;height:60vh;font:11px/1.45 "Lucida Console",Consolas,
     <div id="cfgErr" class="warn" style="min-height:16px;margin-top:3px"></div>
     <div id="cfgHint" style="color:#505050"></div>
     <div class="bar"><button class="b" id="cfgDef">Defaults</button><button class="b" id="cfgSave">Save .yaml</button><button class="b" id="cfgUse" title="Drop the local override">Use deployed</button><span style="display:flex;gap:3px;margin-left:auto"><button class="b" id="cfgOk" style="min-width:75px">OK</button><button class="b" id="cfgNo" style="min-width:75px">Cancel</button></span></div>
+  </div>
+</dialog>
+
+<dialog id="sdlg" aria-labelledby="sdlgT">
+  <div class="title"><h1 id="sdlgT">Settings</h1></div>
+  <div style="padding:8px 6px 4px">
+    <fieldset><legend>Sync</legend>
+      <label class="opt"><input type="radio" name="sm" value="off"> Off</label>
+      <label class="opt"><input type="radio" name="sm" value="gist"> GitHub Gist</label>
+      <div class="frm">
+        <label for="gId">Gist ID</label><input id="gId" class="field" spellcheck="false" autocomplete="off">
+        <label for="gTok">Token</label><input id="gTok" class="field" type="password" spellcheck="false" autocomplete="off">
+      </div>
+      <label class="opt"><input type="radio" name="sm" value="api"> This server (/api/data)</label>
+      <div class="hint" id="apiHint">Cloudflare or Tailscale deployment</div>
+    </fieldset>
+    <div id="sErr" class="warn" style="min-height:16px;margin-top:3px"></div>
+    <div class="bar"><span style="display:flex;gap:3px;margin-left:auto"><button class="b" id="sOk" style="min-width:75px">OK</button><button class="b" id="sNo" style="min-width:75px">Cancel</button></span></div>
   </div>
 </dialog>
 
@@ -364,9 +389,10 @@ function load(){
   else if (old){ S.days = toV3(migrateV1(old, C)); S.lastBackup = old.lastBackup || null; notice = 'Migrated v1 data'; save(); }
   if (!S.days || typeof S.days !== 'object') S.days = {};
 }
-function save(){
+function save(fromSync){
   try { localStorage.setItem(KEY, JSON.stringify({days: S.days, lastBackup: S.lastBackup})); savedAt = new Date(); storageOK = true; }
   catch(e){ storageOK = false; }
+  if (!fromSync) schedulePush();
 }
 
 /* ---------- scheduling & scoring ---------- */
@@ -514,9 +540,18 @@ function status(){
   const now = noon(new Date());
   $('s1').textContent = `Today ${pct(dayScore(now))}%`;
   $('s2').textContent = `Week ${weekScore(now, now)}%`;
-  const s3 = $('s3');
-  s3.textContent = !storageOK ? 'Storage off – export!' : notice || (savedAt ? `Saved ${pad(savedAt.getHours())}:${pad(savedAt.getMinutes())}` : 'Ready');
-  s3.className = storageOK ? '' : 'warn';
+  const s3 = $('s3'), on = SY.mode !== 'off', hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  let t, warn = false;
+  if (!storageOK){ t = 'Storage off – export!'; warn = true; }
+  else if (on && syncState === 'login'){ t = 'Sync: sign in'; warn = true; }
+  else if (on && syncState === 'error'){ t = 'Sync error'; warn = true; }
+  else if (on && syncState === 'offline') t = 'Offline';
+  else if (notice) t = notice;
+  else if (on) t = syncState === 'busy' ? 'Syncing…' : syncedAt ? `Synced ${hm(syncedAt)}` : 'Sync: waiting';
+  else t = savedAt ? `Saved ${hm(savedAt)}` : 'Ready';
+  s3.textContent = t;
+  s3.title = !on ? '' : syncState === 'login' ? 'Click to reload and sign in' : (syncState === 'error' ? syncDetail + ' · ' : '') + 'Click to sync now';
+  s3.className = (warn ? 'warn ' : '') + (on ? 'click' : '');
   const s4 = $('s4'), any = Object.keys(S.days).length > 0;
   if (!S.lastBackup){ s4.textContent = any ? 'No backup yet' : 'Backup: –'; s4.className = any ? 'warn' : ''; }
   else { const d = Math.floor((Date.now() - S.lastBackup) / 864e5); s4.textContent = `Backup ${d ? d + 'd ago' : 'today'}`; s4.className = d > 7 ? 'warn' : ''; }
@@ -565,7 +600,7 @@ $('today').onclick = () => { cur = noon(new Date()); render(); };
 $('vDay').onclick = () => { view = 'day'; render(); };
 $('vWeek').onclick = () => { view = 'week'; render(); };
 document.addEventListener('keydown', e => {
-  if (e.target.closest('input,textarea') || $('dlg').open || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest('input,textarea') || document.querySelector('dialog[open]') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'ArrowLeft') step(-1);
   else if (e.key === 'ArrowRight') step(1);
   else if (e.key.toLowerCase() === 't') $('today').click();
@@ -634,10 +669,146 @@ $('cfg').addEventListener('keydown', e => {
   if (e.key === 'Tab'){ e.preventDefault(); const t = e.target, s = t.selectionStart; t.setRangeText('  ', s, t.selectionEnd, 'end'); }
 });
 
+/* ---------- sync: pull → merge (last write wins per day/habit and note) → push if the remote differs ---------- */
+// Value entries are {n, t}; a bare number (older data) counts as t = 0. On a tie, the higher n / longer note wins,
+// so every device computes the same result.
+const ent = x => (x && typeof x === 'object') ? {n: +x.n || 0, t: +x.t || 0} : (+x ? {n: +x, t: 0} : null);
+function mergeDays(A, B){
+  A = A || {}; B = B || {};
+  const out = {};
+  for (const k of new Set([...Object.keys(A), ...Object.keys(B)])){
+    const a = A[k] || {}, b = B[k] || {}, av = a.v || {}, bv = b.v || {}, d = {v: {}};
+    for (const id of new Set([...Object.keys(av), ...Object.keys(bv)])){
+      const x = ent(av[id]), y = ent(bv[id]);
+      const w = !x ? y : !y ? x : x.t !== y.t ? (x.t > y.t ? x : y) : (y.n > x.n ? y : x);
+      if (w) d.v[id] = w;
+    }
+    const nt = r => (r.note != null || r.noteT != null) ? +r.noteT || 0 : -1;
+    const ta = nt(a), tb = nt(b);
+    if (ta >= 0 || tb >= 0){
+      const sa = String(a.note ?? ''), sb = String(b.note ?? '');
+      const w = ta !== tb ? (ta > tb ? a : b) : (sb.length > sa.length || (sb.length === sa.length && sb > sa)) ? b : a;
+      d.note = String(w.note ?? ''); d.noteT = +w.noteT || 0;
+    }
+    out[k] = d;
+  }
+  return out;
+}
+const canon = o => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v)
+  ? Object.fromEntries(Object.keys(v).sort().map(x => [x, v[x]])) : v);
+
+const K_SYNC = 'dailyTracker.sync';
+let SY = {mode: 'off'};
+try { SY = Object.assign({mode: 'off'}, JSON.parse(lsGet(K_SYNC) || '{}')); } catch(e){}
+if (SY.mode === 'api' && !ONLINE) SY.mode = 'off';
+let syncState = '', syncDetail = '', syncedAt = null, syncing = false, again = false, pushTimer = null, pendingRender = false;
+const PUSH_DELAY = 5000;
+
+const gistApi = id => `https://api.github.com/gists/${encodeURIComponent(id)}`;
+const gistHdr = tok => ({Authorization: `Bearer ${tok}`, Accept: 'application/vnd.github+json'});
+const ADAPTERS = {
+  gist: {
+    async pull(){
+      const r = await fetch(gistApi(SY.id), {headers: gistHdr(SY.tok), cache: 'no-store'});
+      if (!r.ok) throw new Error(`Gist: HTTP ${r.status}`);
+      const f = (await r.json()).files?.['tracker.json'];
+      if (!f) return {};
+      const text = f.truncated ? await (await fetch(f.raw_url, {cache: 'no-store'})).text() : f.content;   // >1 MB comes back truncated
+      return JSON.parse(text || '{}');
+    },
+    async push(data){
+      const r = await fetch(gistApi(SY.id), {method: 'PATCH', headers: gistHdr(SY.tok),
+        body: JSON.stringify({files: {'tracker.json': {content: JSON.stringify(data)}}})});
+      if (!r.ok) throw new Error(`Gist: HTTP ${r.status}`);
+    }
+  },
+  api: {   // same origin: Cloudflare Pages Function or the Tailscale box. A login redirect (Access) is not followed.
+    async pull(){
+      const r = await fetch('api/data', {credentials: 'include', cache: 'no-store', redirect: 'manual'});
+      if (r.type === 'opaqueredirect' || r.status === 401 || r.status === 403) throw new Error('LOGIN');
+      if (!r.ok) throw new Error(`api/data: HTTP ${r.status}`);
+      if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('LOGIN');
+      return r.json();
+    },
+    async push(data){
+      const r = await fetch('api/data', {method: 'PUT', credentials: 'include', redirect: 'manual',
+        headers: {'content-type': 'application/json'}, body: JSON.stringify(data)});
+      if (r.type === 'opaqueredirect' || r.status === 401 || r.status === 403) throw new Error('LOGIN');
+      if (!r.ok) throw new Error(`api/data: HTTP ${r.status}`);
+    }
+  }
+};
+
+function schedulePush(){
+  if (SY.mode === 'off') return;
+  clearTimeout(pushTimer); pushTimer = setTimeout(sync, PUSH_DELAY);
+}
+function rerender(){   // don't pull the rug out from under a field being typed in
+  const a = document.activeElement;
+  if (a && $('view').contains(a) && a.matches('input,textarea')) pendingRender = true; else render();
+}
+async function sync(){
+  const A = ADAPTERS[SY.mode]; if (!A) return;
+  if (syncing){ again = true; return; }
+  syncing = true; clearTimeout(pushTimer); pushTimer = null;
+  syncState = 'busy'; status();
+  try {
+    const remote = await A.pull();
+    const rd = remote && typeof remote.days === 'object' && remote.days ? remote.days : {};
+    const merged = mergeDays(S.days, rd), m = canon(merged);
+    if (m !== canon(mergeDays(S.days, {}))){ S.days = merged; save(true); rerender(); }
+    if (m !== canon(mergeDays(rd, {}))) await A.push({app: 'daily-tracker', version: 3, days: merged});
+    syncState = 'ok'; syncDetail = ''; syncedAt = new Date(); notice = '';
+  } catch(e){
+    syncDetail = errLine(e);
+    syncState = e.message === 'LOGIN' ? 'login' : (e instanceof TypeError || !navigator.onLine) ? 'offline' : 'error';
+  }
+  syncing = false; status();
+  if (again){ again = false; sync(); }
+}
+$('view').addEventListener('focusout', () => { if (pendingRender){ pendingRender = false; setTimeout(render, 0); } });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') sync();     // back in the foreground: pull
+  else if (pushTimer) sync();                             // going to the background: push now
+});
+window.addEventListener('online', () => sync());
+$('s3').addEventListener('click', () => {
+  if (SY.mode === 'off') return;
+  if (syncState === 'login') location.reload(); else sync();
+});
+
+/* ---------- settings ---------- */
+const sdlg = $('sdlg'), radios = [...document.querySelectorAll('input[name="sm"]')];
+function syncSettingsUi(){
+  const m = radios.find(r => r.checked)?.value;
+  $('gId').disabled = $('gTok').disabled = m !== 'gist';
+}
+radios.forEach(r => r.addEventListener('change', syncSettingsUi));
+$('set').onclick = () => {
+  radios.forEach(r => { r.checked = r.value === SY.mode; });
+  const api = radios.find(r => r.value === 'api');
+  api.disabled = !ONLINE;
+  $('apiHint').textContent = ONLINE ? 'Cloudflare or Tailscale deployment' : 'Needs the app served over http(s)';
+  $('gId').value = SY.id || ''; $('gTok').value = SY.tok || ''; $('sErr').textContent = '';
+  syncSettingsUi(); sdlg.showModal();
+};
+$('sNo').onclick = () => sdlg.close();
+$('sOk').onclick = () => {
+  const mode = radios.find(r => r.checked)?.value || 'off';
+  const id = ($('gId').value.trim().match(/[0-9a-f]{20,}/i) || [''])[0], tok = $('gTok').value.trim();   // accepts a pasted Gist URL
+  if (mode === 'gist' && (!id || !tok)){ $('sErr').textContent = 'Enter the Gist ID (or its URL) and a token with the gist scope.'; return; }
+  SY = mode === 'gist' ? {mode, id, tok} : {mode};
+  lsSet(K_SYNC, JSON.stringify(SY));
+  syncState = ''; syncDetail = ''; syncedAt = null; notice = ''; clearTimeout(pushTimer); pushTimer = null;
+  sdlg.close(); status();
+  sync();
+};
+
 load();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 render();
 fetchConfig();
+sync();
 setInterval(status, 60000);
 })();
 </script>

@@ -129,6 +129,50 @@ with sync_playwright() as p:
     check(pg.locator('.wk tr:has(td.it[title="Nasya"]) i.m[data-s="1"]').count() == 1, "week view reads v3 values")
     pg.click("#vDay")
 
+    # ---------- sync: Gist adapter (works from file://; /api/data does not) ----------
+    gist = {"auth": None, "patch": None, "status": 200}
+    def gist_route(route):
+        cors = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, accept, content-type",
+                "Access-Control-Allow-Methods": "GET, PATCH"}
+        r = route.request
+        if r.method == "OPTIONS":
+            return route.fulfill(status=204, headers=cors)
+        gist["auth"] = r.headers.get("authorization")
+        if gist["status"] != 200:
+            return route.fulfill(status=gist["status"], headers=cors, content_type="application/json", body='{"message":"Bad credentials"}')
+        if r.method == "PATCH":
+            gist["patch"] = json.loads(json.loads(r.post_data)["files"]["tracker.json"]["content"])
+            return route.fulfill(status=200, headers=cors, content_type="application/json", body="{}")
+        route.fulfill(status=200, headers=cors, content_type="application/json",
+                      body=json.dumps({"files": {"tracker.json": {"content": "{}", "truncated": False}}}))
+    pg.route("https://api.github.com/gists/**", gist_route)
+
+    def wait_s3(page, prefix):
+        page.wait_for_function(f"document.getElementById('s3').textContent.startsWith({json.dumps(prefix)})")
+
+    def sync_now(page, prefix="Synced"):
+        page.evaluate("document.getElementById('s3').textContent = ''")
+        page.click("#s3")
+        wait_s3(page, prefix)
+
+    pg.click("#set")
+    check(pg.is_disabled('input[name="sm"][value="api"]'), "file://: /api/data sync not offered")
+    pg.check('input[name="sm"][value="gist"]')
+    pg.fill("#gId", "https://gist.github.com/me/0123456789abcdef0123")
+    pg.click("#sOk")
+    check("Gist ID" in pg.inner_text("#sErr") and pg.is_visible("#sdlg"), "Gist settings need a token")
+    pg.fill("#gTok", "tok123")
+    pg.click("#sOk")
+    wait_s3(pg, "Synced")
+    check(gist["auth"] == "Bearer tok123", "Gist requests carry the token")
+    check(gist["patch"] and gist["patch"]["version"] == 3 and gist["patch"]["days"][today]["v"]["nasya"] == {"n": 1, "t": 5},
+          "Gist push uploads local data (ID taken from a pasted URL)")
+    gist["status"] = 401
+    sync_now(pg, "Sync error")
+    check("401" in pg.get_attribute("#s3", "title"), "Gist auth failure shows Sync error with detail")
+    pg.click("#set"); pg.check('input[name="sm"][value="off"]'); pg.click("#sOk")
+    check(pg.inner_text("#s3").startswith(("Saved", "Ready", "Imported")), "sync off restores the plain status")
+
     # ---------- config loading from habits.yaml (served over http) ----------
     srv, BASE = serve_public()
     hp = browser.new_page(viewport={"width": 420, "height": 900})
@@ -208,6 +252,96 @@ with sync_playwright() as p:
     hp.reload()
     hp.wait_for_timeout(300)
     check(hp.evaluate("localStorage.getItem('dailyTracker.override')") is None, "stored default config is not turned into an override")
+    # ---------- sync: two devices through /api/data ----------
+    remote = {"body": "{}", "mode": "ok"}
+
+    def api_route(route):
+        m = remote["mode"]
+        if m == "abort":
+            return route.abort()
+        if m == "login":
+            return route.fulfill(status=302, headers={"location": "https://team.cloudflareaccess.com/cdn-cgi/access/login"})
+        if m == "500":
+            return route.fulfill(status=500, body="boom")
+        if route.request.method == "PUT":
+            remote["body"] = route.request.post_data
+            return route.fulfill(status=204)
+        route.fulfill(status=200, content_type="application/json", headers={"cache-control": "no-store"}, body=remote["body"])
+
+    def device():
+        ctx = browser.new_context(viewport={"width": 420, "height": 900})
+        ctx.route("**/api/data", api_route)
+        page = ctx.new_page()
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(BASE)
+        return page
+
+    def enable_api(page):
+        page.click("#set"); page.check('input[name="sm"][value="api"]'); page.click("#sOk")
+        wait_s3(page, "Synced")
+    rdays = lambda: json.loads(remote["body"]).get("days", {})
+    dot = lambda page, id: page.get_attribute(f'[data-row="{id}"] button.dot', "data-s")
+
+    A, B = device(), device()
+    enable_api(A)
+    A.locator('[data-row="nasya"] button.dot').click()
+    sync_now(A)
+    check(rdays()[today]["v"]["nasya"]["n"] == 1, "device A pushes to /api/data")
+    enable_api(B)
+    check(dot(B, "nasya") == "1", "device B pulls A's change")
+
+    # Merge of two diverging copies
+    remote["body"] = "{}"
+    DA = {today: {"v": {"nasya": {"n": 2, "t": 100}, "water": {"n": 1, "t": 300}, "yoga": {"n": 1, "t": 0}}, "note": "from A", "noteT": 50}}
+    DB = {today: {"v": {"nasya": {"n": 1, "t": 200}, "water": {"n": 3, "t": 100}, "greens": {"n": 2, "t": 10}, "yoga": {"n": 2, "t": 0}},
+                  "note": "from B", "noteT": 60},
+          "2026-01-01": {"v": {"nasya": {"n": 2, "t": 5}}}}
+    for page, d in ((A, DA), (B, DB)):
+        page.evaluate("d => localStorage.setItem('dailyTracker.v3', JSON.stringify({days: d, lastBackup: null}))", d)
+        page.reload()
+        wait_s3(page, "Synced")
+    sync_now(A)
+    want = {today: {"v": {"nasya": {"n": 1, "t": 200}, "water": {"n": 1, "t": 300}, "greens": {"n": 2, "t": 10}, "yoga": {"n": 2, "t": 0}},
+                    "note": "from B", "noteT": 60},
+            "2026-01-01": {"v": {"nasya": {"n": 2, "t": 5}}}}
+    check(v3(A)["days"] == want and v3(B)["days"] == want and rdays() == want,
+          "diverging copies merge per habit by t (ties: higher n), note by noteT")
+    check(dot(A, "nasya") == "1" and A.input_value("#note") == "from B", "merged result shown on screen")
+
+    # A clear propagates
+    A.locator('[data-row="nasya"] button.dot').click()   # 1 -> 2
+    A.locator('[data-row="nasya"] button.dot').click()   # 2 -> 0
+    sync_now(A); sync_now(B)
+    check(dot(B, "nasya") == "0" and v3(B)["days"][today]["v"]["nasya"]["n"] == 0, "a cleared value propagates")
+
+    # Debounced push, 5 s after the last change
+    A.locator('[data-row="nasya"] button.dot').click()
+    A.wait_for_timeout(2000)
+    check(rdays()[today]["v"]["nasya"]["n"] == 0, "no push before the pause")
+    A.wait_for_timeout(4500)
+    check(rdays()[today]["v"]["nasya"]["n"] == 1, "push 5 s after the last change")
+
+    # Pull when the app comes back to the foreground
+    d = rdays(); d[today]["v"]["nasya"] = {"n": 2, "t": 9e12}
+    remote["body"] = json.dumps({"days": d})
+    B.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    B.wait_for_function("document.querySelector('[data-row=nasya] button.dot').dataset.s === '2'")
+    check(True, "foreground pull applies remote changes")
+
+    # Status states
+    for mode, prefix, msg in (("abort", "Offline", "network failure shows Offline"),
+                              ("login", "Sync: sign in", "Access login redirect shows Sync: sign in"),
+                              ("500", "Sync error", "server error shows Sync error"),
+                              ("ok", "Synced", "recovers to Synced")):
+        remote["mode"] = mode
+        sync_now(B, prefix)
+        check(True, msg)
+    B.locator('[data-row="greens"] button.dot').click()
+    remote["mode"] = "abort"
+    sync_now(B, "Offline")
+    check(dot(B, "greens") != "0", "tracking keeps working while sync fails")
+    remote["mode"] = "ok"
+
     srv.shutdown()
 
     check(not errors, "no page errors")

@@ -40,7 +40,8 @@ tests/
   - `habits.yaml`, fetched with `cache: 'no-cache'` after the first render (`fetchConfig`), only on http(s). A valid file is cached (LF line endings) under `dailyTracker.deployed`; an invalid one keeps the cached copy and shows `Config error: …` in the status bar and the editor.
   - The embedded default in `<script type="text/yaml" id="defaultYaml">`, always used under `file://` (plus any override). Keep it identical to `public/habits.yaml`.
 - **Views:** Day (fieldsets of rows with circles) and Week (a table with a Wk totals column).
-- **Backup:** Export writes a version 3 JSON file with the data only. Import replaces all data and accepts a `.json` backup (v1, v2 or v3; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override.
+- **Backup:** Export writes a version 3 JSON file with the data only. Import replaces all local data and accepts a `.json` backup (v1, v2 or v3; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override. With sync on, the next sync merges the imported data with the remote copy, so remote values with a newer `t` win.
+- **Sync:** settings live in `dailyTracker.sync` (`{mode: 'off'|'gist'|'api', id, tok}`), per device and not synced. `ADAPTERS.gist` / `ADAPTERS.api` implement `pull()`/`push(data)`; the remote payload is `{app, version: 3, days}`. `sync()` always pulls, merges with `mergeDays` (per day and habit, newer `t` wins; ties go to the higher `n`; the note goes by `noteT`, ties to the longer text), saves and re-renders if local changed, and pushes only if the remote differs. It runs on open, on returning to the foreground, on `online`, 5 s after the last `save()` (`PUSH_DELAY`), when going to the background with a push pending, and when the status cell is clicked. One sync runs at a time. `/api/data` requests use `redirect: 'manual'`, so a Cloudflare Access login redirect is reported as `LOGIN` rather than a CORS failure. The status cell (`#s3`) shows `Syncing…`, `Synced HH:MM`, `Offline`, `Sync: sign in` (click reloads) or `Sync error` (detail in its tooltip). `/api/data` is not offered under `file://`; Gist works there.
 
 ## Roadmap (build in this order)
 
@@ -52,7 +53,7 @@ tests/
 2. ✅ **Timestamps for merging** (DEPLOYMENT.md §1.1) — done
    - Store each value as `{n, t}` and give the note a `noteT`.
    - Add a v2 → v3 migration. Older backups must still import.
-3. **Sync** (DEPLOYMENT.md §1.1, §2.5, §3.5, §4.5)
+3. ✅ **Sync** (DEPLOYMENT.md §1.1, §2.5, §3.5, §4.5) — done
    - An adapter interface `pull()`/`push(data)`, merging per day and per habit with last-write-wins on `t`.
    - Pull when the app opens and when it returns to the foreground. Push 5 s after the last change, and when the app goes to the background.
    - A **Settings…** dialog to pick the adapter: off, Gist (ID and token), or same-origin `/api/data` (used by both Cloudflare and Tailscale).

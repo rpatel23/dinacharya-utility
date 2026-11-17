@@ -339,7 +339,9 @@ async function push(data) {
 }
 ```
 
-When the Access session expires, sync requests get redirected to the login page instead of returning data. The app catches the `LOGIN` error, shows **Sync: sign in** in the status bar, and reloads the page so you can log in. Tracking keeps working offline the whole time.
+When the Access session expires, sync requests get redirected to the login page instead of returning data. The app catches the `LOGIN` error and shows **Sync: sign in** in the status bar. Click it to reload the page and log in. The app doesn't reload by itself, so nothing you're typing is lost. Tracking keeps working offline the whole time.
+
+The app's adapter also passes `redirect: 'manual'`. Without it, the browser would follow the redirect to the Access login domain, fail the cross-origin check, and report it as a network error ("Offline") instead of a sign-in.
 
 ### 3.6 Notes
 
