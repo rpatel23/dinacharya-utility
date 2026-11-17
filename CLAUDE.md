@@ -23,6 +23,11 @@ public/
   index.html      the app (with js-yaml and a copy of habits.yaml as the fallback default)
   habits.yaml     the deployed habits config, which is the source of truth (see DEPLOYMENT.md §1.4)
   manifest.webmanifest, sw.js, icon-192.png, icon-512.png, apple-touch-icon.png   PWA (DEPLOYMENT.md §1.2)
+functions/api/data.js   Option 2: Cloudflare Pages Function for /api/data (KV)
+wrangler.toml           Option 2: Pages config (fill in the KV namespace id)
+server/
+  server.py       Option 3: stdlib server for public/ and /api/data (data in server/data/, gitignored)
+  tracker.service Option 3: systemd unit
 tools/
   make_icons.py   renders the three PNG icons from one SVG (Playwright)
 docs/
@@ -66,15 +71,17 @@ tests/
    - `manifest.webmanifest`, `sw.js` and icons (192, 512, and a 180 apple-touch icon) in the Win98 style.
    - Register the service worker only on http(s).
 5. **Deployment targets**
-   - Option 2: `functions/api/data.js` and `wrangler.toml` (§3.2).
-   - Option 3: `server/server.py` and `server/tracker.service` (§4.3–4.4).
-   - Option 1 needs only GitHub Pages settings.
+   - ✅ Option 2: `functions/api/data.js` and `wrangler.toml` (§3.2) — done; not yet deployed to a real Cloudflare account.
+   - ✅ Option 3: `server/server.py` and `server/tracker.service` (§4.3–4.4) — done.
+   - Option 1: GitHub Pages is on, but it publishes the repo root (`main`, `/`), so the app is at `…/dinacharya-utility/public/` and the docs are published too. **To do:** a GitHub Actions workflow that deploys only `public/`, then switch Settings → Pages → Source to GitHub Actions.
 
 ## Testing
 
 ```bash
 pip install playwright     # Chromium may already be installed; otherwise: python -m playwright install chromium
-python tests/smoke_test.py
+python tests/smoke_test.py        # the app (file:// and http, config, data, sync, PWA)
+python tests/server_test.py       # server/server.py, incl. two devices syncing through it
+node tests/cf_function_test.mjs   # functions/api/data.js against an in-memory KV
 ```
 
 Extend the smoke test with each roadmap step. At minimum, cover config validation, every habit kind, migrations, and a merge of two diverging copies. Before finishing a UI change, take a screenshot at a width of 420px and check it.

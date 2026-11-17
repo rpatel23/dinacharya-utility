@@ -1,0 +1,18 @@
+# systemd unit for Option 3 (docs/DEPLOYMENT.md §4.4).
+# Copy to /etc/systemd/system/tracker.service, adjust User and WorkingDirectory to where you cloned the repo, then:
+#   sudo systemctl enable --now tracker
+#   sudo tailscale serve --bg 8080        # HTTPS on https://tracker.<tailnet>.ts.net (serve, never funnel)
+[Unit]
+Description=Daily Tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/daily-tracker
+ExecStart=/usr/bin/python3 server/server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

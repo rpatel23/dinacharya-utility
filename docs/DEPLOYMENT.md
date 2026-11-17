@@ -265,42 +265,16 @@ phone/laptop ──HTTPS──▶ Cloudflare Access (email one-time code)
 
 ### 3.2 Project layout
 
+The repo already has everything Option 2 needs:
+
 ```
-daily-tracker/
-  public/               ← app files from 1.2
-  functions/api/data.js
-  wrangler.toml
-```
-
-**wrangler.toml**
-
-```toml
-name = "daily-tracker"
-pages_build_output_dir = "./public"
-compatibility_date = "2026-11-01"
-
-[[kv_namespaces]]
-binding = "KV"
-id = "<namespace id from step 2>"
+wrangler.toml           ← Pages config; uploads public/ as the static site
+public/                 ← app files from 1.2
+functions/api/data.js   ← the /api/data endpoint
 ```
 
-**functions/api/data.js**
-
-```js
-export async function onRequestGet({ env }) {
-  return new Response(await env.KV.get('data') ?? '{}',
-    { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
-}
-
-export async function onRequestPut({ request, env }) {
-  const text = await request.text();
-  JSON.parse(text);                                   // reject anything that isn't JSON
-  await env.KV.put('data', text);
-  await env.KV.put(`backup:${new Date().toISOString().slice(0, 10)}`, text,
-                   { expirationTtl: 60 * 60 * 24 * 90 });   // daily snapshot, kept 90 days
-  return new Response(null, { status: 204 });
-}
-```
+- **`wrangler.toml`**: the only thing to fill in is the KV namespace `id` (step 2 in 3.3). It replaces `REPLACE_WITH_KV_NAMESPACE_ID`.
+- **`functions/api/data.js`**: `GET` returns the data (or `{}`), never cached. `PUT` checks that the body is a JSON object (anything else gets a `400` and changes nothing), saves it as the `data` key, and writes a `backup:YYYY-MM-DD` snapshot of the day's last version (UTC), which KV deletes after 90 days. Test it locally with `node tests/cf_function_test.mjs`.
 
 ### 3.3 Deploy
 
@@ -375,59 +349,29 @@ Any always-on Linux machine that can run Python 3 works. A Raspberry Pi 4 or 5, 
 2. In the Tailscale admin console, under **DNS**, turn on **MagicDNS** and **HTTPS Certificates**.
 3. Rename the machine to `tracker` in the console, so its address is `tracker.<tailnet>.ts.net`.
 
-### 4.3 Tiny server: server.py
+### 4.3 Tiny server: server/server.py
 
-```python
-import json, shutil, datetime, pathlib
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+`server/server.py` uses only Python's standard library. It serves `public/` and the sync endpoint:
 
-ROOT = pathlib.Path(__file__).parent
-DATA = ROOT / "data" / "data.json"
-DATA.parent.mkdir(exist_ok=True)
+- **`GET /api/data`** returns `server/data/data.json`, or `{}` if there's none yet.
+- **`PUT /api/data`** accepts a JSON object only (anything else gets a `400` and changes nothing). It writes the file atomically and keeps a copy of each day's first version as `server/data/YYYY-MM-DD.json`, deleting copies older than 90 days.
+- **Static files** come only from `public/`, with no directory listings. `sw.js`, `habits.yaml` and the page are sent with `Cache-Control: no-cache`, so deploys show up right away.
 
-class H(SimpleHTTPRequestHandler):
-    def __init__(s, *a, **k): super().__init__(*a, directory=str(ROOT / "public"), **k)
-    def do_GET(s):
-        if s.path != "/api/data": return super().do_GET()
-        body = DATA.read_bytes() if DATA.exists() else b"{}"
-        s.send_response(200); s.send_header("Content-Type", "application/json")
-        s.send_header("Cache-Control", "no-store"); s.end_headers(); s.wfile.write(body)
-    def do_PUT(s):
-        if s.path != "/api/data": return s.send_error(404)
-        body = s.rfile.read(int(s.headers["Content-Length"])); json.loads(body)
-        tmp = DATA.with_suffix(".tmp"); tmp.write_bytes(body); tmp.replace(DATA)   # atomic write
-        snap = DATA.parent / f"{datetime.date.today()}.json"
-        if not snap.exists(): shutil.copy(DATA, snap)                          # daily copy
-        s.send_response(204); s.end_headers()
+It listens only on `127.0.0.1:8080`, so Tailscale is the only way in. To change that, set `TRACKER_HOST`, `TRACKER_PORT` or `TRACKER_DATA` (the data folder). `server/data/` is in `.gitignore`.
 
-ThreadingHTTPServer(("127.0.0.1", 8080), H).serve_forever()
-```
-
-It listens only on `127.0.0.1`. Tailscale is the only way in.
+Try it on any machine: run `python3 server/server.py` from the repo root and open `http://127.0.0.1:8080`. `python tests/server_test.py` tests it, including two devices syncing through it.
 
 ### 4.4 Run it on boot, and expose it to the tailnet
 
-`/etc/systemd/system/tracker.service`
-
-```ini
-[Unit]
-Description=Daily Tracker
-After=network-online.target
-
-[Service]
-WorkingDirectory=/home/pi/daily-tracker
-ExecStart=/usr/bin/python3 server.py
-Restart=always
-User=pi
-
-[Install]
-WantedBy=multi-user.target
-```
-
 ```bash
+git clone https://github.com/<you>/<repo>.git ~/daily-tracker
+sudo cp ~/daily-tracker/server/tracker.service /etc/systemd/system/
+sudo nano /etc/systemd/system/tracker.service   # set User and WorkingDirectory if not pi and /home/pi/daily-tracker
 sudo systemctl enable --now tracker
 sudo tailscale serve --bg 8080        # HTTPS on https://tracker.<tailnet>.ts.net → localhost:8080
 ```
+
+`server/tracker.service` runs `python3 server/server.py` from the repo folder, and restarts it if it stops.
 
 Use `tailscale serve`, not `tailscale funnel`. Funnel publishes to the public internet.
 
@@ -438,8 +382,8 @@ This is the same as Option 2's adapter, without the login handling. `fetch('api/
 ### 4.6 Notes
 
 - **Phones:** sync works only while the Tailscale app is connected. You can still track while it's off, and the app syncs the next time it connects. To make this automatic, turn on Tailscale's **Always-on VPN** (Android) or **On Demand** (iOS).
-- **Backups:** the box is a single point of failure. Copy `data/` somewhere else nightly, for example with a cron job that runs `rclone` to your Google Drive. You can also use the app's **Export** button from time to time.
-- **Updates:** `git pull` (or copy the files over) into `public/`, then bump `CACHE`. You don't need to restart the server.
+- **Backups:** the box is a single point of failure. Copy `server/data/` somewhere else nightly, for example with a cron job that runs `rclone` to your Google Drive. You can also use the app's **Export** button from time to time.
+- **Updates:** run `git pull` in the repo folder. (When you change app files, bump `CACHE` in `sw.js` before you push.) You don't need to restart the server unless `server.py` itself changed (`sudo systemctl restart tracker`).
 
 ---
 

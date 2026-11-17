@@ -21,7 +21,7 @@ Open `public/index.html` in a browser. Your data is saved in the browser automat
 
 ## Status
 
-The app works as a standalone file, loads `habits.yaml` from the server, and syncs across devices (data format v3, with timestamps for merging). When served over HTTPS it can be installed as an app (PWA) and opens offline. The server files for each deployment option are next; see the roadmap in CLAUDE.md.
+The app works as a standalone file, loads `habits.yaml` from the server, syncs across devices (data format v3, with timestamps for merging), and installs as an app (PWA) when served over HTTPS. The repo includes the Cloudflare Pages Function (`functions/`, `wrangler.toml`) and the Tailscale home-box server (`server/`). A GitHub Actions workflow for Pages is still to do; see the roadmap in CLAUDE.md.
 
 ## License
 

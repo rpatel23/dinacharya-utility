@@ -1,0 +1,10 @@
+# Cloudflare Pages config for Option 2 (docs/DEPLOYMENT.md §3.2–3.3).
+# Deploy from the repo root:  wrangler pages deploy
+# Only public/ is uploaded as static files; functions/ provides /api/data.
+name = "daily-tracker"
+pages_build_output_dir = "./public"
+compatibility_date = "2026-11-01"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"   # from: wrangler kv namespace create TRACKER
