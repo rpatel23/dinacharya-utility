@@ -1,1 +1,8 @@
-.idea/
+*.png
+!public/*.png
+__pycache__/
+node_modules/
+.wrangler/
+.dev.vars
+server/data/
+tracker-backup-*.json
