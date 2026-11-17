@@ -185,7 +185,7 @@ groups:
 </script>
 <script>
 (() => {
-const KEY = 'dailyTracker.v2', OLD = 'dailyTracker.v1';
+const KEY = 'dailyTracker.v3', V2 = 'dailyTracker.v2', OLD = 'dailyTracker.v1';
 const K_DEP = 'dailyTracker.deployed', K_LOCAL = 'dailyTracker.override';   // last valid habits.yaml · per-device override
 const ONLINE = /^https?:$/.test(location.protocol);
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -325,29 +325,43 @@ function migrateV1(old, cfg){
   }
   return days;
 }
+// v2 day { v:{id:number}, note } → v3 day { v:{id:{n,t}}, note, noteT }. t = 0: any later edit wins a merge.
+function toV3(days){
+  const out = {};
+  for (const [k, r] of Object.entries(days || {})){
+    if (!r || typeof r !== 'object') continue;
+    const d = {v: {}};
+    for (const [id, n] of Object.entries(r.v || {})) if (+n) d.v[id] = {n: +n, t: 0};
+    if (r.note){ d.note = String(r.note); d.noteT = 0; }
+    out[k] = d;
+  }
+  return out;
+}
 function load(){
   if (ONLINE){ const d = lsGet(K_DEP); if (d) baseYaml = d; }
   localYaml = lsGet(K_LOCAL);
-  let stored = null, old = null;
+  let stored = null, v2 = null, old = null;
   try {
     const r = localStorage.getItem(KEY);
     if (r) stored = JSON.parse(r);
-    else { const o = localStorage.getItem(OLD); if (o) old = JSON.parse(o); }
+    else {
+      const r2 = localStorage.getItem(V2);
+      if (r2) v2 = JSON.parse(r2);
+      else { const o = localStorage.getItem(OLD); if (o) old = JSON.parse(o); }
+    }
   } catch(e){ storageOK = false; }
-  // Config used to be saved with the data. An edited one becomes this device's local override.
-  if (stored && typeof stored.yaml === 'string'){
-    const y = lf(stored.yaml);
+  // v2 used to save the config with the data. An edited one becomes this device's local override.
+  if (v2 && typeof v2.yaml === 'string'){
+    const y = lf(v2.yaml);
     if (localYaml == null && y.trim() !== DEFAULT_YAML.trim()){
       try { compile(y); localYaml = y; lsSet(K_LOCAL, y); } catch(e){}
     }
   }
   applyConfig();
-  if (stored){
-    S.days = stored.days; S.lastBackup = stored.lastBackup ?? null;
-    if ('yaml' in stored) save();
-  } else if (old){
-    S.days = migrateV1(old, C); S.lastBackup = old.lastBackup || null; notice = 'Migrated v1 data'; save();
-  }
+  // Older keys are left in place as a safety copy.
+  if (stored){ S.days = stored.days; S.lastBackup = stored.lastBackup ?? null; }
+  else if (v2){ S.days = toV3(v2.days); S.lastBackup = v2.lastBackup ?? null; save(); }
+  else if (old){ S.days = toV3(migrateV1(old, C)); S.lastBackup = old.lastBackup || null; notice = 'Migrated v1 data'; save(); }
   if (!S.days || typeof S.days !== 'object') S.days = {};
 }
 function save(){
@@ -368,7 +382,7 @@ function sched(it, d){
   }
   return true;
 }
-const val = (k, it) => +(((S.days[k] || {}).v || {})[it.id] || 0);
+const val = (k, it) => { const x = ((S.days[k] || {}).v || {})[it.id]; return +((x && typeof x === 'object') ? x.n : x) || 0; };
 function level(it, v){
   if (it.kind === 'check') return Math.max(0, Math.min(2, v|0));
   if (it.min == null) return null;           // logged only
@@ -444,7 +458,8 @@ function renderDay(){
 function setVal(it, v){
   const k = key(cur), r = S.days[k] || (S.days[k] = {v:{}});
   r.v = r.v || {};
-  if (v) r.v[it.id] = v; else delete r.v[it.id];
+  // A cleared value keeps {n:0, t} so the clear wins a merge against an older copy.
+  if (v || r.v[it.id]) r.v[it.id] = {n: v, t: Date.now()};
   save();
 }
 function refreshRow(it, focusSel){
@@ -531,7 +546,10 @@ $('view').addEventListener('contextmenu', e => {
   setVal(it, Math.max(0, val(key(cur), it) - 1)); refreshRow(it, 'button.dot');
 });
 $('view').addEventListener('input', e => {
-  if (e.target.id === 'note'){ const k = key(cur); (S.days[k] || (S.days[k] = {v:{}})).note = e.target.value; save(); status(); return; }
+  if (e.target.id === 'note'){
+    const k = key(cur), r = S.days[k] || (S.days[k] = {v:{}});
+    r.note = e.target.value; r.noteT = Date.now(); save(); status(); return;
+  }
   if (e.target.matches('input.num')){
     const it = find(e.target.dataset.id); if (!it) return;
     setVal(it, Math.max(0, parseFloat(e.target.value) || 0));
@@ -563,7 +581,7 @@ function download(name, text, type){
 }
 $('exp').onclick = () => {
   S.lastBackup = Date.now();
-  download(`tracker-backup-${key(new Date())}.json`, JSON.stringify({app:'daily-tracker', version:2, exported:new Date().toISOString(), ...S}), 'application/json');
+  download(`tracker-backup-${key(new Date())}.json`, JSON.stringify({app:'daily-tracker', version:3, exported:new Date().toISOString(), ...S}), 'application/json');
   save(); status();
 };
 $('imp').onclick = () => $('file').click();
@@ -580,8 +598,9 @@ $('file').onchange = e => {
         const o = JSON.parse(rd.result);
         if (!o || typeof o.days !== 'object') throw new Error('No "days" found in file.');
         if (!confirm(`Replace all data with ${Object.keys(o.days).length} day(s) from ${f.name}?`)) return;
-        if (o.version === 2) S.days = o.days;           // a config saved in older backups is ignored
-        else S.days = migrateV1(o, C);
+        if (o.version === 3) S.days = o.days;
+        else if (o.version === 2) S.days = toV3(o.days); // a config saved in older backups is ignored
+        else S.days = toV3(migrateV1(o, C));
         S.lastBackup = o.lastBackup || S.lastBackup;
       }
       notice = 'Imported ' + f.name; save(); render();

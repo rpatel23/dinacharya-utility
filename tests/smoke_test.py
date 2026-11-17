@@ -39,14 +39,18 @@ with sync_playwright() as p:
     errors = []
     pg.on("pageerror", lambda e: errors.append(str(e)))
 
-    # v1 -> v2 migration
+    pg.on("dialog", lambda d: d.accept())               # confirm() on import
+    v3 = lambda page: json.loads(page.evaluate("localStorage.getItem('dailyTracker.v3')"))
+
+    # v1 -> v3 migration
     pg.goto(URL)
     today = pg.evaluate("(d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)(new Date())")
     V1["days"] = {today: V1["days"]["TODAY"]}
     pg.evaluate("v => { localStorage.clear(); localStorage.setItem('dailyTracker.v1', JSON.stringify(v)); }", V1)
     pg.reload()
-    days = pg.evaluate("JSON.parse(localStorage.getItem('dailyTracker.v2')).days")
-    check(days[today]["v"] == {"yoga": 2, "water": 3, "pcf": 1, "miles": 3.5}, "v1 data migrated")
+    days = v3(pg)["days"]
+    check(days[today]["v"] == {k: {"n": n, "t": 0} for k, n in {"yoga": 2, "water": 3, "pcf": 1, "miles": 3.5}.items()}
+          and days[today]["note"] == "old" and days[today]["noteT"] == 0, "v1 data migrated to v3 with t = 0")
 
     # Counter (dots): set water to 4 -> min
     pg.locator('[data-row="water"] button.dot').nth(3).click()
@@ -80,6 +84,50 @@ with sync_playwright() as p:
         pg.click("#cfgOk")
         check(expect in pg.inner_text("#cfgErr"), f"rejects config: {expect}")
     pg.click("#cfgNo")
+
+    # ---------- v3 data: timestamps ----------
+    d = v3(pg)["days"][today]
+    check(d["v"]["nasya"]["n"] == 1 and d["v"]["nasya"]["t"] > 1e12, "edit stores {n, t}")
+    check(d["v"]["yoga"] == {"n": 2, "t": 0}, "untouched migrated value keeps t = 0")
+    pg.locator('[data-row="nasya"] button.dot').click()
+    pg.locator('[data-row="nasya"] button.dot').click()
+    n = v3(pg)["days"][today]["v"]["nasya"]
+    check(n["n"] == 0 and n["t"] > 1e12, "clearing a value keeps {n: 0, t}")
+    check(pg.get_attribute('[data-row="nasya"] button.dot', "data-s") == "0", "cleared value shows missed")
+    pg.fill("#note", "hello")
+    d = v3(pg)["days"][today]
+    check(d["note"] == "hello" and d["noteT"] > 1e12, "note stores noteT")
+
+    # v2 -> v3 migration
+    V2 = {"days": {today: {"v": {"nasya": 2, "water": 5}, "note": "v2 note"}}, "lastBackup": 123}
+    pg.evaluate("v => { localStorage.clear(); localStorage.setItem('dailyTracker.v2', JSON.stringify(v)); }", V2)
+    pg.reload()
+    s3 = v3(pg)
+    check(s3["days"][today] == {"v": {"nasya": {"n": 2, "t": 0}, "water": {"n": 5, "t": 0}}, "note": "v2 note", "noteT": 0}
+          and s3["lastBackup"] == 123, "v2 data migrated to v3")
+    check(pg.evaluate("localStorage.getItem('dailyTracker.v2')") is not None, "v2 key kept as a safety copy")
+    check(pg.get_attribute('[data-row="nasya"] button.dot', "data-s") == "2", "migrated v2 value shown")
+
+    # Export writes v3
+    with pg.expect_download() as dl:
+        pg.click("#exp")
+    b = json.loads(pathlib.Path(dl.value.path()).read_text(encoding="utf-8"))
+    check(b["version"] == 3 and b["days"][today]["v"]["nasya"] == {"n": 2, "t": 0} and "yaml" not in b, "export writes a v3 backup")
+
+    # Import: v1, v2 and v3 backups
+    def imp(name, obj):
+        pg.set_input_files("#file", files=[{"name": name, "mimeType": "application/json", "buffer": json.dumps(obj).encode()}])
+        pg.wait_for_function(f"document.getElementById('s3').textContent === 'Imported {name}'")
+        return v3(pg)["days"][today]
+    d = imp("b2.json", {"app": "daily-tracker", "version": 2, "yaml": "groups: {}", "days": {today: {"v": {"nasya": 1}}}})
+    check(d == {"v": {"nasya": {"n": 1, "t": 0}}}, "v2 backup imports (config ignored)")
+    d = imp("b1.json", {"config": [], "days": {today: {"v": {"nasya": [2]}, "note": "n1"}}})
+    check(d == {"v": {"nasya": {"n": 2, "t": 0}}, "note": "n1", "noteT": 0}, "v1 backup imports")
+    d = imp("b3.json", {"app": "daily-tracker", "version": 3, "days": {today: {"v": {"nasya": {"n": 1, "t": 5}}, "note": "x", "noteT": 6}}})
+    check(d == {"v": {"nasya": {"n": 1, "t": 5}}, "note": "x", "noteT": 6}, "v3 backup imports with timestamps")
+    pg.click("#vWeek")
+    check(pg.locator('.wk tr:has(td.it[title="Nasya"]) i.m[data-s="1"]').count() == 1, "week view reads v3 values")
+    pg.click("#vDay")
 
     # ---------- config loading from habits.yaml (served over http) ----------
     srv, BASE = serve_public()
@@ -147,15 +195,15 @@ with sync_playwright() as p:
     check(hp.evaluate("localStorage.getItem('dailyTracker.override')") is None, "override removed from storage")
 
     # Config no longer stored with data; old stored config migrates to an override
-    check("yaml" not in json.loads(hp.evaluate("localStorage.getItem('dailyTracker.v2')") or "{}"), "config not saved with data")
-    hp.evaluate("""([y, t]) => { localStorage.removeItem('dailyTracker.override');
+    check("yaml" not in json.loads(hp.evaluate("localStorage.getItem('dailyTracker.v3')") or "{}"), "config not saved with data")
+    hp.evaluate("""([y, t]) => { localStorage.removeItem('dailyTracker.override'); localStorage.removeItem('dailyTracker.v3');
         localStorage.setItem('dailyTracker.v2', JSON.stringify({yaml: y, days: {[t]: {v: {ww: 1}}}, lastBackup: null})); }""", [LEGACY, today])
     hp.reload()
     hp.wait_for_selector('[data-row="ww"]')
     check(hp.get_attribute('[data-row="ww"] button.dot', "data-s") == "1", "legacy stored config kept as override with data")
     check(hp.evaluate("localStorage.getItem('dailyTracker.override')") == LEGACY, "legacy config moved to override key")
-    check("yaml" not in json.loads(hp.evaluate("localStorage.getItem('dailyTracker.v2')")), "legacy yaml removed from data")
-    hp.evaluate("""() => { localStorage.removeItem('dailyTracker.override');
+    check("yaml" not in json.loads(hp.evaluate("localStorage.getItem('dailyTracker.v3')")), "legacy yaml not carried into v3")
+    hp.evaluate("""() => { localStorage.removeItem('dailyTracker.override'); localStorage.removeItem('dailyTracker.v3');
         localStorage.setItem('dailyTracker.v2', JSON.stringify({yaml: document.getElementById('defaultYaml').textContent, days: {}, lastBackup: null})); }""")
     hp.reload()
     hp.wait_for_timeout(300)

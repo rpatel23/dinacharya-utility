@@ -29,18 +29,18 @@ tests/
   smoke_test.py   Playwright smoke test
 ```
 
-## Current state (v2)
+## Current state (v3)
 
-- **Storage:** the `localStorage` key `dailyTracker.v2` holds
-  `{ days: { 'YYYY-MM-DD': { v: { <id>: number }, note }, … }, lastBackup }`.
-  The number is a level from 0 to 2 for checks, a unit count for counters, or the entered value for number entries.
-- **Migration:** on first load, data stored under `dailyTracker.v1` is converted automatically (see `migrateV1`). Older v2 data that still carries a `yaml` field has it removed; if that config differs from the embedded default, it becomes the local override (see `load`).
+- **Storage:** the `localStorage` key `dailyTracker.v3` holds
+  `{ days: { 'YYYY-MM-DD': { v: { <id>: { n, t } }, note, noteT }, … }, lastBackup }`.
+  `n` is a level from 0 to 2 for checks, a unit count for counters, or the entered value for number entries. `t` and `noteT` are `Date.now()` of the last change, used for last-write-wins merging. Clearing a value stores `{ n: 0, t }` (and an emptied note keeps `noteT`) so the clear wins against an older copy; never delete entries on clear.
+- **Migration:** on first load, `dailyTracker.v2` (or else `dailyTracker.v1`, via `migrateV1`) is converted by `toV3`, with `t: 0`/`noteT: 0` so any later edit wins. The old keys are left in place as a safety copy. A `yaml` field in v2 data is not carried over; if it differs from the embedded default, it becomes the local override (see `load`).
 - **Config:** `compile(yamlText)` parses with `jsyaml.CORE_SCHEMA`, validates against the CONFIG.md rules, and returns `{ weekStart, groups, all }`. Sources, in order:
   - `dailyTracker.override`: the per-device local override saved from **Habits…** or a `.yaml` import. Status bar: `Config: local`; **Use deployed** drops it.
   - `habits.yaml`, fetched with `cache: 'no-cache'` after the first render (`fetchConfig`), only on http(s). A valid file is cached (LF line endings) under `dailyTracker.deployed`; an invalid one keeps the cached copy and shows `Config error: …` in the status bar and the editor.
   - The embedded default in `<script type="text/yaml" id="defaultYaml">`, always used under `file://` (plus any override). Keep it identical to `public/habits.yaml`.
 - **Views:** Day (fieldsets of rows with circles) and Week (a table with a Wk totals column).
-- **Backup:** Export writes a JSON file with the data only. Import accepts a `.json` backup (v1 or v2; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override.
+- **Backup:** Export writes a version 3 JSON file with the data only. Import replaces all data and accepts a `.json` backup (v1, v2 or v3; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override.
 
 ## Roadmap (build in this order)
 
@@ -49,7 +49,7 @@ tests/
    - If the fetched file is invalid, keep the last valid config and show `Config error: …` in the status bar.
    - The Habits… editor becomes a per-device **local override**. While one is active, the status bar shows `Config: local`, and a **Use deployed** button drops it.
    - Move the config out of the stored data shape (`yaml` is no longer saved with the data).
-2. **Timestamps for merging** (DEPLOYMENT.md §1.1)
+2. ✅ **Timestamps for merging** (DEPLOYMENT.md §1.1) — done
    - Store each value as `{n, t}` and give the note a `noteT`.
    - Add a v2 → v3 migration. Older backups must still import.
 3. **Sync** (DEPLOYMENT.md §1.1, §2.5, §3.5, §4.5)
