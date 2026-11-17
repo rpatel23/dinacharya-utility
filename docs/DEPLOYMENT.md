@@ -125,6 +125,8 @@ self.addEventListener('fetch', e => {
 </script>
 ```
 
+The shipped app registers the worker from its main script, and only when served over http(s). Its `public/sw.js` also adds two things to the snippet above. A navigation to `./?signin=…` skips the cache, so the **Sync: sign in** click (see 3.5) reaches the Cloudflare Access login instead of the cached page. And the `habits.yaml` response is cloned before the body is read.
+
 `crossorigin="use-credentials"` matters only for Option 2. Behind Cloudflare Access, the browser has to send your login cookie when it fetches the manifest, or the install fails. It does no harm in the other options.
 
 **Updating the app:** change the `CACHE` name (`tracker-v2`, and so on) and deploy. Devices download the new version in the background and switch to it the next time the app opens. Close it fully and reopen it if you want the update right away.

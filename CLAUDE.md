@@ -22,6 +22,9 @@ Daily Tracker is a minimalist, offline-first habit tracker for a single user, us
 public/
   index.html      the app (with js-yaml and a copy of habits.yaml as the fallback default)
   habits.yaml     the deployed habits config, which is the source of truth (see DEPLOYMENT.md §1.4)
+  manifest.webmanifest, sw.js, icon-192.png, icon-512.png, apple-touch-icon.png   PWA (DEPLOYMENT.md §1.2)
+tools/
+  make_icons.py   renders the three PNG icons from one SVG (Playwright)
 docs/
   CONFIG.md       habits.yaml reference
   DEPLOYMENT.md   deployment options 1–3, sync model, PWA
@@ -42,6 +45,7 @@ tests/
 - **Views:** Day (fieldsets of rows with circles) and Week (a table with a Wk totals column).
 - **Backup:** Export writes a version 3 JSON file with the data only. Import replaces all local data and accepts a `.json` backup (v1, v2 or v3; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override. With sync on, the next sync merges the imported data with the remote copy, so remote values with a newer `t` win.
 - **Sync:** settings live in `dailyTracker.sync` (`{mode: 'off'|'gist'|'api', id, tok}`), per device and not synced. `ADAPTERS.gist` / `ADAPTERS.api` implement `pull()`/`push(data)`; the remote payload is `{app, version: 3, days}`. `sync()` always pulls, merges with `mergeDays` (per day and habit, newer `t` wins; ties go to the higher `n`; the note goes by `noteT`, ties to the longer text), saves and re-renders if local changed, and pushes only if the remote differs. It runs on open, on returning to the foreground, on `online`, 5 s after the last `save()` (`PUSH_DELAY`), when going to the background with a push pending, and when the status cell is clicked. One sync runs at a time. `/api/data` requests use `redirect: 'manual'`, so a Cloudflare Access login redirect is reported as `LOGIN` rather than a CORS failure. The status cell (`#s3`) shows `Syncing…`, `Synced HH:MM`, `Offline`, `Sync: sign in` (click reloads) or `Sync error` (detail in its tooltip). `/api/data` is not offered under `file://`; Gist works there.
+- **PWA:** `sw.js` is registered only on http(s). It serves the app shell cache-first (`CACHE = 'tracker-vN'`: **bump it whenever an app file changes**, or devices keep the old version), `habits.yaml` network-first, and never touches `/api/` or other origins. A navigation with `?signin` bypasses the cache so the `Sync: sign in` click can reach the Cloudflare Access login; the app then strips `?signin` from the address. Every file in `SHELL` must exist or the install fails (the smoke test checks this).
 
 ## Roadmap (build in this order)
 
@@ -58,7 +62,7 @@ tests/
    - Pull when the app opens and when it returns to the foreground. Push 5 s after the last change, and when the app goes to the background.
    - A **Settings…** dialog to pick the adapter: off, Gist (ID and token), or same-origin `/api/data` (used by both Cloudflare and Tailscale).
    - A sync state cell in the status bar: `Synced 12:04`, `Offline`, `Sync: sign in` or `Sync error`.
-4. **PWA** (DEPLOYMENT.md §1.2)
+4. ✅ **PWA** (DEPLOYMENT.md §1.2) — done
    - `manifest.webmanifest`, `sw.js` and icons (192, 512, and a 180 apple-touch icon) in the Win98 style.
    - Register the service worker only on http(s).
 5. **Deployment targets**

@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Daily Tracker</title>
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#000080">
 <style>
 :root{--face:#C0C0C0;--hi:#FFFFFF;--lt:#DFDFDF;--sh:#808080;--dk:#000000;--desk:#008080;--navy:#000080;--min:#FFD000;--max:#FF7F27;--part:#EFE4BE}
 *{box-sizing:border-box}
@@ -774,7 +777,8 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('online', () => sync());
 $('s3').addEventListener('click', () => {
   if (SY.mode === 'off') return;
-  if (syncState === 'login') location.reload(); else sync();
+  // ?signin makes the service worker let this load reach the network, so Access can show its login page.
+  if (syncState === 'login') location.href = location.pathname + '?signin=' + Date.now(); else sync();
 });
 
 /* ---------- settings ---------- */
@@ -803,6 +807,10 @@ $('sOk').onclick = () => {
   sdlg.close(); status();
   sync();
 };
+
+/* ---------- PWA ---------- */
+if (ONLINE && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (/[?&]signin=/.test(location.search)) history.replaceState(null, '', location.pathname);
 
 load();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

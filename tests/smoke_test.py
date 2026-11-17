@@ -173,9 +173,12 @@ with sync_playwright() as p:
     pg.click("#set"); pg.check('input[name="sm"][value="off"]'); pg.click("#sOk")
     check(pg.inner_text("#s3").startswith(("Saved", "Ready", "Imported")), "sync off restores the plain status")
 
+    check(pg.evaluate("!navigator.serviceWorker || navigator.serviceWorker.getRegistrations().then(r => r.length === 0, () => true)"),
+          "file://: no service worker registered")
+
     # ---------- config loading from habits.yaml (served over http) ----------
     srv, BASE = serve_public()
-    hp = browser.new_page(viewport={"width": 420, "height": 900})
+    hp = browser.new_page(viewport={"width": 420, "height": 900}, service_workers="block")
     hp.on("pageerror", lambda e: errors.append(str(e)))
     mode = {"m": "real"}
 
@@ -269,7 +272,7 @@ with sync_playwright() as p:
         route.fulfill(status=200, content_type="application/json", headers={"cache-control": "no-store"}, body=remote["body"])
 
     def device():
-        ctx = browser.new_context(viewport={"width": 420, "height": 900})
+        ctx = browser.new_context(viewport={"width": 420, "height": 900}, service_workers="block")
         ctx.route("**/api/data", api_route)
         page = ctx.new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -341,6 +344,38 @@ with sync_playwright() as p:
     sync_now(B, "Offline")
     check(dot(B, "greens") != "0", "tracking keeps working while sync fails")
     remote["mode"] = "ok"
+
+    # ---------- PWA: manifest, icons, service worker ----------
+    ctx = browser.new_context(viewport={"width": 420, "height": 900})
+    wp = ctx.new_page()
+    wp.on("pageerror", lambda e: errors.append(str(e)))
+    wp.goto(BASE)
+    wp.evaluate("navigator.serviceWorker.ready")
+    wp.reload()
+    check(wp.evaluate("!!navigator.serviceWorker.controller"), "service worker registered and controls the page")
+    shell = wp.evaluate("caches.open('tracker-v1').then(c => c.keys()).then(k => k.map(r => new URL(r.url).pathname))")
+    check(len(shell) == 7 and "/habits.yaml" in shell and "/apple-touch-icon.png" in shell, "app shell cached (all 7 files exist)")
+    m = wp.evaluate("fetch('manifest.webmanifest').then(r => r.json())")
+    check(m["display"] == "standalone" and m["start_url"] == "./", "manifest is served and valid")
+    sizes = wp.evaluate("""Promise.all(['icon-192.png', 'icon-512.png', 'apple-touch-icon.png'].map(src =>
+        new Promise(ok => { const i = new Image(); i.onload = () => ok([i.naturalWidth, i.naturalHeight]); i.onerror = () => ok(null); i.src = src; })))""")
+    check(sizes == [[192, 192], [512, 512], [180, 180]], "icons have the right sizes")
+    check(wp.evaluate("document.querySelector('link[rel=manifest]').crossOrigin") == "use-credentials", "manifest link sends credentials (Access)")
+
+    ctx.set_offline(True)
+    wp.reload()
+    wp.wait_for_selector('[data-row="nasya"]')
+    check(not wp.is_visible("#sCfg"), "offline: app and habits.yaml load from the cache")
+    ctx.set_offline(False)
+
+    ctx.route("**/?signin=*", lambda r: r.fulfill(status=200, content_type="text/html", body="<title>Access login</title>"))
+    wp.goto(BASE + "?signin=1")
+    check(wp.title() == "Access login", "?signin navigation bypasses the cache and reaches the network")
+    ctx.unroute("**/?signin=*")
+    wp.goto(BASE + "?signin=2")
+    wp.wait_for_selector('[data-row="nasya"]')
+    check(wp.evaluate("location.search") == "", "app strips ?signin from the address")
+    ctx.close()
 
     srv.shutdown()
 
