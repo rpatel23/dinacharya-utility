@@ -50,7 +50,7 @@ tests/
 - **Views:** Day (fieldsets of rows with circles) and Week (a table with a Wk totals column).
 - **Backup:** Export writes a version 3 JSON file with the data only. Import replaces all local data and accepts a `.json` backup (v1, v2 or v3; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override. With sync on, the next sync merges the imported data with the remote copy, so remote values with a newer `t` win.
 - **Sync:** settings live in `dailyTracker.sync` (`{mode: 'off'|'gist'|'api', id, tok}`), per device and not synced. `ADAPTERS.gist` / `ADAPTERS.api` implement `pull()`/`push(data)`; the remote payload is `{app, version: 3, days}`. `sync()` always pulls, merges with `mergeDays` (per day and habit, newer `t` wins; ties go to the higher `n`; the note goes by `noteT`, ties to the longer text), saves and re-renders if local changed, and pushes only if the remote differs. It runs on open, on returning to the foreground, on `online`, 5 s after the last `save()` (`PUSH_DELAY`), when going to the background with a push pending, and when the status cell is clicked. One sync runs at a time. `/api/data` requests use `redirect: 'manual'`, so a Cloudflare Access login redirect is reported as `LOGIN` rather than a CORS failure. The status cell (`#s3`) shows `Syncing…`, `Synced HH:MM`, `Offline`, `Sync: sign in` (click reloads) or `Sync error` (detail in its tooltip). `/api/data` is not offered under `file://`; Gist works there.
-- **PWA:** `sw.js` is registered only on http(s). It serves the app shell cache-first (`CACHE = 'tracker-vN'`: **bump it whenever an app file changes**, or devices keep the old version), `habits.yaml` network-first, and never touches `/api/` or other origins. A navigation with `?signin` bypasses the cache so the `Sync: sign in` click can reach the Cloudflare Access login; the app then strips `?signin` from the address. Every file in `SHELL` must exist or the install fails (the smoke test checks this).
+- **PWA:** `sw.js` is registered only on http(s). It serves the app shell cache-first (`CACHE = 'tracker-vN'`: **bump it whenever an app file changes** when deploying with Options 2 or 3, or devices keep the old version (the Pages workflow stamps it automatically)), `habits.yaml` network-first, and never touches `/api/` or other origins. A navigation with `?signin` bypasses the cache so the `Sync: sign in` click can reach the Cloudflare Access login; the app then strips `?signin` from the address. Every file in `SHELL` must exist or the install fails (the smoke test checks this).
 
 ## Roadmap (build in this order)
 
@@ -73,7 +73,7 @@ tests/
 5. **Deployment targets**
    - ✅ Option 2: `functions/api/data.js` and `wrangler.toml` (§3.2) — done; not yet deployed to a real Cloudflare account.
    - ✅ Option 3: `server/server.py` and `server/tracker.service` (§4.3–4.4) — done.
-   - Option 1: GitHub Pages is on, but it publishes the repo root (`main`, `/`), so the app is at `…/dinacharya-utility/public/` and the docs are published too. **To do:** a GitHub Actions workflow that deploys only `public/`, then switch Settings → Pages → Source to GitHub Actions.
+   - ✅ Option 1: `.github/workflows/pages.yml` runs all three tests on every push to `main`, then publishes only `public/` to https://rpatel23.github.io/dinacharya-utility/ (Pages source: GitHub Actions). The deploy rewrites `CACHE` in the published `sw.js` to `tracker-<short sha>`, so Pages never needs a manual bump; Options 2 and 3 still do.
 
 ## Testing
 

@@ -192,12 +192,12 @@ phone/laptop ──HTTPS──▶ <you>.github.io/daily-tracker      (app files,
 
 ### 2.2 Host the app on GitHub Pages
 
-1. Create a repo, for example `daily-tracker`. It must be **public** for Pages on a free plan. The repo holds only the app code, never your data.
-2. Commit the `public/` files to the root of the repo, or to a `/docs` folder.
-3. Go to **Settings → Pages → Build and deployment**. Choose **Deploy from a branch**, branch `main`, folder `/ (root)` or `/docs`, then click **Save**.
-4. About a minute later the site is live at `https://<you>.github.io/daily-tracker/`, with HTTPS included.
+1. Push this repo to GitHub. It must be **public** for Pages on a free plan. The repo holds only the app code, never your data.
+2. Go to **Settings → Pages → Build and deployment** and set **Source** to **GitHub Actions**.
+3. Push to `main`, or run the **Pages** workflow from the **Actions** tab. `.github/workflows/pages.yml` runs the tests, then publishes only `public/`.
+4. A couple of minutes later the site is live at `https://<you>.github.io/<repo>/`, with HTTPS included.
 
-To update it, push a commit. Remember to bump `CACHE` in `sw.js`.
+To update it, push a commit. Each push to `main` is tested and then deployed, and a failing test stops the deploy. The workflow names the service worker's cache after the commit (`tracker-<sha>`), so you don't bump `CACHE` by hand for Pages. Edits to `habits.yaml` made on github.com go through the same workflow.
 
 ### 2.3 Create the data Gist
 

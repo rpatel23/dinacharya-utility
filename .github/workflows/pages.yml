@@ -1,0 +1,63 @@
+# Option 1: test, then publish only public/ to GitHub Pages (docs/DEPLOYMENT.md §2.2).
+# Requires Settings → Pages → Source: GitHub Actions.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: App smoke test
+        run: python tests/smoke_test.py
+      - name: Server test (Option 3)
+        run: python tests/server_test.py
+      - name: Cloudflare function test (Option 2)
+        run: node tests/cf_function_test.mjs
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build site from public/
+        run: |
+          cp -r public _site
+          # Name the service worker cache after the commit, so every deploy reaches devices
+          # without bumping CACHE by hand.
+          sed -i -E "s/^const CACHE = '[^']*';/const CACHE = 'tracker-${GITHUB_SHA::7}';/" _site/sw.js
+          grep -q "^const CACHE = 'tracker-${GITHUB_SHA::7}';" _site/sw.js
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
