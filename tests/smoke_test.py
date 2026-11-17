@@ -77,7 +77,11 @@ with sync_playwright() as p:
     # Config validation
     pg.click("#edit")
     for bad, expect in [("groups:\n  A:\n    x: {name: X, cnt: 3}\n", 'unknown option "cnt"'),
-                        ("groups:\n  A:\n    x: {name: X, count: 3, min: 4}\n", "min > max"),
+                        ("groups:\n  A:\n    x: {name: X, count: 5, min: 4, max: 3}\n", "min > max"),
+                        ("groups:\n  A:\n    x: {name: X, count: 3, min: 4}\n", "min > count"),
+                        ("groups:\n  A:\n    x: {name: X, count: 3, min: 1, max: 4}\n", "max > count"),
+                        ("groups:\n  A:\n    x: {name: X, count: 3, max: 2}\n", "max needs min"),
+                        ("groups:\n  A:\n    x: {name: X, value: mi, max: 5}\n", "max needs min"),
                         ("groups:\n  A:\n    x: {name: X, days: tu}\n", 'unknown day "tu"'),
                         ("groups:\n  A:\n    x: {name: X, every: 2}\n", "every needs a start date"),
                         ("groups:\n  A:\n    x: {name: X, avoid: true, count: 3}\n", "avoid habits are pass/fail; remove count"),
@@ -95,8 +99,7 @@ with sync_playwright() as p:
     d = v3(pg)["days"][today]
     check(d["v"]["nasya"]["n"] == 1 and d["v"]["nasya"]["t"] > 1e12, "edit stores {n, t}")
     check(d["v"]["yoga"] == {"n": 2, "t": 0}, "untouched migrated value keeps t = 0")
-    pg.locator('[data-row="nasya"] button.dot').click()
-    pg.locator('[data-row="nasya"] button.dot').click()
+    pg.locator('[data-row="nasya"] button.dot').click()     # plain check: done -> blank
     n = v3(pg)["days"][today]["v"]["nasya"]
     check(n["n"] == 0 and n["t"] > 1e12, "clearing a value keeps {n: 0, t}")
     check(pg.get_attribute('[data-row="nasya"] button.dot', "data-s") == "0", "cleared value shows missed")
@@ -112,7 +115,7 @@ with sync_playwright() as p:
     check(s3["days"][today] == {"v": {"nasya": {"n": 2, "t": 0}, "water": {"n": 5, "t": 0}}, "note": "v2 note", "noteT": 0}
           and s3["lastBackup"] == 123, "v2 data migrated to v3")
     check(pg.evaluate("localStorage.getItem('dailyTracker.v2')") is not None, "v2 key kept as a safety copy")
-    check(pg.get_attribute('[data-row="nasya"] button.dot', "data-s") == "2", "migrated v2 value shown")
+    check(pg.get_attribute('[data-row="nasya"] button.dot', "data-s") == "1", "migrated v2 value shown (old 2 reads as done)")
 
     # Export writes v3
     with pg.expect_download() as dl:
@@ -185,7 +188,7 @@ with sync_playwright() as p:
     # ---------- avoid habits (issue #2) ----------
     pg.evaluate("localStorage.removeItem('dailyTracker.v3')"); pg.reload()
     adot = lambda id: pg.get_attribute(f'[data-row="{id}"] button.dot', "data-s")
-    score = lambda: [int(x) for x in re.match(r"(\d+)/(\d+) · (\d+) max", pg.inner_text("#prog")).group(1, 3, 2)]
+    score = lambda: [int(x) for x in re.match(r"(\d+)/(\d+)(?: · (\d+) max)?", pg.inner_text("#prog")).group(1, 3, 2)]
     check(adot("nsm") == "0" and pg.is_visible(".key .kav"), "avoid habit starts blank; legend shows clean/failed")
     base = score()
     seq = []
@@ -233,6 +236,46 @@ with sync_playwright() as p:
     check(not pg.is_visible(".key .kav"), "legend hides clean/failed without avoid habits")
     pg.evaluate("localStorage.removeItem('dailyTracker.override')")
     pg.reload()
+
+
+    # ---------- max is optional extra credit (issue #3) ----------
+    CFG3 = ("groups:\\n  A:\\n    c2: {name: C2}\\n    c3: {name: C3, max: extra}\\n"
+            "    k1: {name: K1, count: 3, min: 2}\\n    k2: {name: K2, count: 3, min: 2, max: 3}\\n"
+            "    v1: {name: V1, value: mi, min: 2}\\n")
+    pg.evaluate("d => localStorage.setItem('dailyTracker.v3', JSON.stringify({days: d, lastBackup: null}))",
+                {today: {"v": {"c2": {"n": 2, "t": 1}, "k1": {"n": 3, "t": 1}, "k2": {"n": 3, "t": 1}, "v1": {"n": 5, "t": 1}}}})
+    pg.evaluate(f"localStorage.setItem('dailyTracker.override', '{CFG3}')")
+    pg.reload()
+    sh = lambda id: pg.get_attribute(f'[data-row="{id}"] .dot', "data-s")
+    crit = lambda id: pg.inner_text(f'[data-row="{id}"] .crit') if pg.locator(f'[data-row="{id}"] .crit').count() else ""
+    check(pg.inner_text("#prog").endswith("4/5 · 1 max · 80%"), "Day % counts min; only habits with a max add to max")
+    check(sh("c2") == "1", "stored 2 on a check without max shows as done")
+    pg.locator('[data-row="c2"] button.dot').click()
+    a = v3(pg)["days"][today]["v"]["c2"]["n"]
+    pg.locator('[data-row="c2"] button.dot').click()
+    b = v3(pg)["days"][today]["v"]["c2"]["n"]
+    check((a, b) == (0, 1), "check without max: old 2 clears in one tap, then toggles 0 <-> 1")
+    seq = []
+    for _ in range(3):
+        pg.locator('[data-row="c3"] button.dot').click(); seq.append(sh("c3"))
+    check(seq == ["1", "2", "0"], "check with max text (no min text) cycles missed -> min -> max")
+    check(crit("c3") == "max: extra" and crit("c2") == "", "criteria shows only the text that is set")
+    check(sh("k1") == "1" and sh("k2") == "2", "counter reaches max only when max is written")
+    check(pg.get_attribute('[data-row="v1"] span.dot', "data-s") == "1", "number entry with min only never reaches max")
+    check(crit("k1") == "goal 2" and crit("k2") == "min 2 · max 3" and crit("v1") == "goal 2 mi", "criteria: goal without max")
+    pg.evaluate("localStorage.setItem('dailyTracker.override', 'groups:\\n  A:\\n    c2: {name: C2}\\n    k1: {name: K1, count: 3, min: 2}\\n')")
+    pg.reload()
+    check(re.search(r"^\d+/2 · \d+%$", pg.inner_text("#prog").strip().splitlines()[-1]) and "max" not in pg.inner_text("#prog"),
+          "day bar hides the max count when no habit has a max")
+    pg.evaluate("localStorage.removeItem('dailyTracker.override')")
+    pg.reload()
+    for _ in range(4):
+        pg.locator('[data-row="greens"] button.dot').click()
+    w = pg.locator('[data-row="water"] button.dot')
+    w.nth(5).click()
+    check(pg.get_attribute('[data-row="greens"] button.dot', "data-s") == "1"
+          and pg.locator('[data-row="water"] button.dot').nth(0).get_attribute("data-s") == "2",
+          "habits.yaml: greens has no bonus, water keeps max 6")
 
     # ---------- config loading from habits.yaml (served over http) ----------
     srv, BASE = serve_public()
@@ -370,8 +413,7 @@ with sync_playwright() as p:
     check(dot(A, "nasya") == "1" and A.input_value("#note") == "from B", "merged result shown on screen")
 
     # A clear propagates
-    A.locator('[data-row="nasya"] button.dot').click()   # 1 -> 2
-    A.locator('[data-row="nasya"] button.dot').click()   # 2 -> 0
+    A.locator('[data-row="nasya"] button.dot').click()   # done -> blank
     sync_now(A); sync_now(B)
     check(dot(B, "nasya") == "0" and v3(B)["days"][today]["v"]["nasya"]["n"] == 0, "a cleared value propagates")
 
@@ -392,10 +434,10 @@ with sync_playwright() as p:
     check(rdays()[today]["v"]["nasya"]["n"] == 1, "push 5 s after the last change")
 
     # Pull when the app comes back to the foreground
-    d = rdays(); d[today]["v"]["nasya"] = {"n": 2, "t": 9e12}
+    d = rdays(); d[today]["v"]["nasya"] = {"n": 1, "t": 9e12}
     remote["body"] = json.dumps({"days": d})
     B.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
-    B.wait_for_function("document.querySelector('[data-row=nasya] button.dot').dataset.s === '2'")
+    B.wait_for_function("document.querySelector('[data-row=nasya] button.dot').dataset.s === '1'")
     check(True, "foreground pull applies remote changes")
 
     # Status states

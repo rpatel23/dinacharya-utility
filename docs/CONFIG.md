@@ -1,6 +1,6 @@
 # habits.yaml reference
 
-`habits.yaml` defines every habit the tracker shows: what it's called, which days it appears, and what counts as **min** and **max**. Each change you make there applies on every device. Deployment is covered in `DEPLOYMENT.md`, section 1.4.
+`habits.yaml` defines every habit the tracker shows: what it's called, which days it appears, and what counts as done (**min**) and, optionally, extra credit (**max**). Each change you make there applies on every device. Deployment is covered in `DEPLOYMENT.md`, section 1.4.
 
 ## Structure
 
@@ -33,20 +33,22 @@ groups:                    # shown in this order
 | `show` | `dots`, `one` | `dots` | How a counter is drawn: `dots` is one circle per unit. `one` is a single circle showing a number; tap to add 1, right-click to subtract 1. |
 | `value` | unit text, e.g. `mi` | — | Makes the habit a **number entry** in that unit. |
 | `avoid` | `true` / `false` | `false` | Makes the habit an **avoid** habit: something you try not to do (see Habit kinds). Can't be combined with `count`, `value`, `show`, `min` or `max`. |
-| `min` | number or text | see below | The **min** criterion. |
-| `max` | number or text | see below | The **max** criterion. |
+| `min` | number or text | see below | The **min** criterion: what counts as done. |
+| `max` | number or text | — | Optional **extra credit**. A habit has a max level only when you write `max`. |
 
 Any option not in this table is rejected, so a typo like `cnt:` gives an error instead of being silently ignored.
 
 ## Habit kinds
 
+**min** means done, and it's what Day % and Week % measure. **max** is optional extra credit beyond that, and exists only when you write it. Most habits need neither: a plain check is done or not done.
+
 What `min`/`max` mean depends on the kind of habit:
 
 | Kind | Declared by | What you enter | `min` / `max` |
 |---|---|---|---|
-| **check** | no `count`, `value` or `avoid` | One circle that cycles missed → min → max | **Text** describing each level, shown under the name. Optional. |
-| **counter** | `count: N` | 0…N units | **Numbers** (thresholds). `max` defaults to `count`, and `min` defaults to `max`. `max` can't be greater than `count`. |
-| **number entry** | `value: unit` | Any number ≥ 0 | **Numbers** (thresholds). With neither set, the habit is **logged only** and not scored. If only one is set, the other defaults to it. |
+| **check** | no `count`, `value` or `avoid` | One circle. Without `max`, a tap toggles missed ↔ done (min). With `max`, it cycles missed → min → max. | **Text** describing each level, shown under the name. Both optional; `max` text adds the extra-credit level. |
+| **counter** | `count: N` | 0…N units | **Numbers** (thresholds). `min` defaults to `count`. There's no max unless you write one. `max` needs `min` and can't be greater than `count`. |
+| **number entry** | `value: unit` | Any number ≥ 0 | **Numbers** (thresholds). With neither set, the habit is **logged only** and not scored. `min` alone means done at that value, with no extra credit. `max` needs `min`. |
 | **avoid** | `avoid: true` | One circle that cycles blank → clean (green) → failed (red) → blank | Not allowed. It's pass/fail: clean counts as **min** and never as max. |
 
 ```yaml
@@ -58,10 +60,12 @@ Use **avoid** for things you're trying not to do. Leave it blank until you know 
 The same habit can be written several ways depending on how you want to enter it:
 
 ```yaml
-water:  {name: Water, count: 5, min: 3}             # 5 circles; 3 = min, 5 = max
+water:  {name: Water, count: 5, min: 3}             # 5 circles; done at 3, no extra credit
+water:  {name: Water, count: 5, min: 3, max: 5}     # done at 3, extra credit at 5
 water:  {name: Water, count: 5, min: 3, show: one}  # 1 circle, tap up to 5
 water:  {name: Water, value: glasses, min: 3, max: 5}
 water:  {name: Water, min: 3 glasses, max: 5 glasses}  # check: you judge the level yourself
+water:  {name: Water, note: 3+ glasses}             # check: done or not
 ```
 
 ## Scoring
@@ -70,12 +74,12 @@ Each habit gets a level for each day:
 
 | Level | check | counter / number entry | avoid |
 |---|---|---|---|
-| **max** | You tapped it twice | value ≥ `max` | — |
+| **max** (only if `max` is set) | You tapped it twice | value ≥ `max` | — |
 | **min** | You tapped it once | value ≥ `min` | clean (green) |
 | partial | — | 0 < value < `min` (shown pale, counts as missed) | — |
 | missed | not tapped | 0 | blank, or failed (red) |
 
-- **Day %** is the share of that day's scored habits that reached at least min. The bar also shows how many reached max.
+- **Day %** is the share of that day's scored habits that reached at least min. The bar also shows how many reached max, when any of that day's habits has one. Extra credit never raises the percentage.
 - **`per_week` habits** don't count toward the day. A day counts toward the weekly target when it reaches at least min. The week counts as min once that reaches `N`, and as max once it reaches `M`. These habits still appear only on their `days`.
 - **Week %** combines every scored day in the week with each `per_week` habit counted once.
 - Levels are calculated from what you entered whenever they're displayed. Changing `min`/`max` therefore changes how past days score too. To keep the old scoring for the past, see Changing habits safely.
@@ -127,6 +131,8 @@ The app checks the whole file before using it. Each error names the habit:
 | `x: unknown day "tu"` | Use at least the first three letters (`mon`…`sun`), `weekdays`, `weekend` or `daily` |
 | `x: min > max` | Lower `min` or raise `max` |
 | `x: max > count` | `max` can't be more units than the habit has |
+| `x: min > count` | `min` can't be more units than the habit has |
+| `x: max needs min` | A counter or number entry with `max` also needs `min` (what counts as done) |
 | `x: every needs a start date` | Add `start: YYYY-MM-DD` |
 | `x: use count or value, not both` | Pick one kind |
 | `x: show needs count` | `show` only applies to counters |

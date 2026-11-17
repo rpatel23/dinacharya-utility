@@ -53,6 +53,7 @@ tests/
   - `dailyTracker.override`: the per-device local override saved from **Habits…** or a `.yaml` import. Status bar: `Config: local`; **Use deployed** drops it.
   - `habits.yaml`, fetched with `cache: 'no-cache'` after the first render (`fetchConfig`), only on http(s). A valid file is cached (LF line endings) under `dailyTracker.deployed`; an invalid one keeps the cached copy and shows `Config error: …` in the status bar and the editor.
   - The embedded default in `<script type="text/yaml" id="defaultYaml">`, always used under `file://` (plus any override). Keep it identical to `public/habits.yaml`.
+- **min / max:** min is done and is all Day %/Week % measure; max is optional extra credit that exists only when written (`hasMax(it)`: check `maxText`, count/value `it.max != null`). A check without max text toggles 0 ↔ 1 and reads any stored `n ≥ 1` as done (old 2s are never rewritten). A counter's `min` defaults to `count`; `max` never defaults.
 - **Habit kinds:** `check`, `count`, `value` and `avoid` (`avoid: true`; blank → clean → failed → blank; clean scores as min and never max; colours `--ok` / `--fail`, and the legend's clean/failed entries show only when the config has an avoid habit).
 - **Views:** Day (fieldsets of rows with circles) and Week (a table with a Wk totals column).
 - **Backup:** Export writes a version 3 JSON file with the data only. Import replaces all local data and accepts a `.json` backup (v1, v2 or v3; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override. With sync on, the next sync merges the imported data with the remote copy, so remote values with a newer `t` win.
@@ -97,4 +98,4 @@ Extend the smoke test with each roadmap step. At minimum, cover config validatio
 
 ## Owner context
 
-The routine in `habits.yaml` reflects the owner's Oct 2026 calendar: training on Mon–Sun, eye and voice practice in the mornings, an Ayurvedic evening routine, and work and study blocks. The thresholds for water (4 of 6), greens (3 of 4) and screen breaks (2 of 3), and the LinkedIn post start date, were guesses that the owner may adjust.
+The routine in `habits.yaml` reflects the owner's Oct 2026 calendar: training on Mon–Sun, eye and voice practice in the mornings, an Ayurvedic evening routine, and work and study blocks. The thresholds for water (4 of 6), greens (3 of 4) and screen breaks (2 of 3), and the LinkedIn post start date, were guesses that the owner may adjust. Water and screen breaks give extra credit (max) for the full count; greens deliberately doesn't.
