@@ -25,7 +25,7 @@ def serve_public():
 DEPLOYED = "groups:\r\n  A:\r\n    nasya: Nasya\r\n    zz: Deployed habit\r\n"   # CRLF on purpose
 LOCAL = "groups:\n  A:\n    nasya: Nasya\n    zz: Deployed habit\n    yy: Local habit\n"
 LEGACY = "groups:\n  A:\n    ww: Legacy habit\n"
-V1 = {"config": [], "days": {"TODAY": {"v": {"water": [1, 1, 1, 0, 0, 0], "yoga": [2], "pcf": [1]},
+V1 = {"config": [], "days": {"TODAY": {"v": {"water": [1, 1, 1, 0, 0, 0], "yoga": [2], "pcf": [1], "sff": [2]},
                                             "miles": "3.5", "note": "old"}}, "lastBackup": None}
 
 def check(cond, msg):
@@ -49,7 +49,7 @@ with sync_playwright() as p:
     pg.evaluate("v => { localStorage.clear(); localStorage.setItem('dailyTracker.v1', JSON.stringify(v)); }", V1)
     pg.reload()
     days = v3(pg)["days"]
-    check(days[today]["v"] == {k: {"n": n, "t": 0} for k, n in {"yoga": 2, "water": 3, "pcf": 1, "miles": 3.5}.items()}
+    check(days[today]["v"] == {k: {"n": n, "t": 0} for k, n in {"yoga": 2, "water": 3, "pcf": 1, "sff": 2, "miles": 3.5}.items()}
           and days[today]["note"] == "old" and days[today]["noteT"] == 0, "v1 data migrated to v3 with t = 0")
 
     # Counter (dots): set water to 4 -> min
@@ -79,7 +79,13 @@ with sync_playwright() as p:
     for bad, expect in [("groups:\n  A:\n    x: {name: X, cnt: 3}\n", 'unknown option "cnt"'),
                         ("groups:\n  A:\n    x: {name: X, count: 3, min: 4}\n", "min > max"),
                         ("groups:\n  A:\n    x: {name: X, days: tu}\n", 'unknown day "tu"'),
-                        ("groups:\n  A:\n    x: {name: X, every: 2}\n", "every needs a start date")]:
+                        ("groups:\n  A:\n    x: {name: X, every: 2}\n", "every needs a start date"),
+                        ("groups:\n  A:\n    x: {name: X, avoid: true, count: 3}\n", "avoid habits are pass/fail; remove count"),
+                        ("groups:\n  A:\n    x: {name: X, avoid: true, value: mi}\n", "avoid habits are pass/fail; remove value"),
+                        ("groups:\n  A:\n    x: {name: X, avoid: true, min: a}\n", "avoid habits are pass/fail; remove min"),
+                        ("groups:\n  A:\n    x: {name: X, avoid: true, max: b}\n", "avoid habits are pass/fail; remove max"),
+                        ("groups:\n  A:\n    x: {name: X, avoid: true, show: one}\n", "avoid habits are pass/fail; remove show"),
+                        ("groups:\n  A:\n    x: {name: X, avoid: yes}\n", "avoid is true or false")]:
         pg.fill("#cfg", bad)
         pg.click("#cfgOk")
         check(expect in pg.inner_text("#cfgErr"), f"rejects config: {expect}")
@@ -175,6 +181,58 @@ with sync_playwright() as p:
 
     check(pg.evaluate("!navigator.serviceWorker || navigator.serviceWorker.getRegistrations().then(r => r.length === 0, () => true)"),
           "file://: no service worker registered")
+
+    # ---------- avoid habits (issue #2) ----------
+    pg.evaluate("localStorage.removeItem('dailyTracker.v3')"); pg.reload()
+    adot = lambda id: pg.get_attribute(f'[data-row="{id}"] button.dot', "data-s")
+    score = lambda: [int(x) for x in re.match(r"(\d+)/(\d+) · (\d+) max", pg.inner_text("#prog")).group(1, 3, 2)]
+    check(adot("nsm") == "0" and pg.is_visible(".key .kav"), "avoid habit starts blank; legend shows clean/failed")
+    base = score()
+    seq = []
+    for _ in range(3):
+        pg.locator('[data-row="nsm"] button.dot').click()
+        seq.append((adot("nsm"), v3(pg)["days"][today]["v"]["nsm"]["n"], score()))
+    check([x[:2] for x in seq] == [("ok", 1), ("x", -1), ("0", 0)], "avoid cycles blank -> clean -> failed -> blank (n 1, -1, 0)")
+    check(v3(pg)["days"][today]["v"]["nsm"]["t"] > 1e12, "avoid clear keeps {n: 0, t}")
+    check(seq[0][2] == [base[0] + 1, base[1], base[2]], "clean scores as min, never max")
+    check(seq[1][2] == base and seq[2][2] == base, "failed and blank score as missed")
+    check(pg.get_attribute('[data-row="nsm"] button.dot', "aria-label") == "No social media: blank", "avoid aria-label")
+    # an old check value (1 or 2) reads as clean after switching the habit to avoid
+    pg.evaluate("d => localStorage.setItem('dailyTracker.v3', JSON.stringify({days: d, lastBackup: null}))",
+                {today: {"v": {"sff": {"n": 2, "t": 0}, "nsm": {"n": -1, "t": 1}}}})
+    pg.reload()
+    check(adot("sff") == "ok" and adot("nsm") == "x", "stored 2 reads as clean, -1 as failed")
+    pg.locator('[data-row="sff"] button.dot').click()
+    check(v3(pg)["days"][today]["v"]["sff"]["n"] == -1, "clean (old 2) -> failed on next tap")
+    # week view
+    pg.click("#vWeek")
+    row = pg.locator('.wk tr:has(td.it[title="No social media"])')
+    check(row.locator('i.m[data-s="x"]').count() == 1 and row.locator(".mn").count() == 0, "week view shows failed in red, no number")
+    tot = row.locator("td.tot").inner_text()
+    check(re.fullmatch(r"0/7", tot), "week total counts clean days of scheduled days")
+    check(row.locator('td[title="No social media: failed"]').count() == 1, "week cell title says failed")
+    pg.click("#vDay")
+    # export / import keep -1
+    with pg.expect_download() as dl:
+        pg.click("#exp")
+    b = json.loads(pathlib.Path(dl.value.path()).read_text(encoding="utf-8"))
+    check(b["days"][today]["v"]["nsm"] == {"n": -1, "t": 1}, "export keeps failed (-1)")
+    d = imp("av.json", {"app": "daily-tracker", "version": 3, "days": {today: {"v": {"nsm": {"n": -1, "t": 7}}}}})
+    check(d["v"]["nsm"] == {"n": -1, "t": 7} and adot("nsm") == "x", "import keeps failed (-1)")
+    # per_week with avoid counts clean days; legend hidden without avoid habits
+    pg.click("#vWeek")
+    ks = [pg.get_attribute(f".wk thead th:nth-child({i}) button", "data-go") for i in (2, 3, 4)]
+    pg.click("#vDay")
+    pg.evaluate("d => localStorage.setItem('dailyTracker.v3', JSON.stringify({days: d, lastBackup: null}))",
+                {ks[0]: {"v": {"q": {"n": 1, "t": 1}}}, ks[1]: {"v": {"q": {"n": -1, "t": 1}}}, ks[2]: {"v": {"q": {"n": 1, "t": 1}}}})
+    pg.evaluate("localStorage.setItem('dailyTracker.override', 'groups:\\n  A:\\n    q: {name: Q, avoid: true, per_week: 2}\\n')")
+    pg.reload()
+    check("2 of 2 this week" in pg.inner_text('[data-row="q"]'), "per_week avoid counts clean days only")
+    pg.evaluate("localStorage.setItem('dailyTracker.override', 'groups:\\n  A:\\n    nasya: Nasya\\n')")
+    pg.reload()
+    check(not pg.is_visible(".key .kav"), "legend hides clean/failed without avoid habits")
+    pg.evaluate("localStorage.removeItem('dailyTracker.override')")
+    pg.reload()
 
     # ---------- config loading from habits.yaml (served over http) ----------
     srv, BASE = serve_public()
@@ -316,6 +374,15 @@ with sync_playwright() as p:
     A.locator('[data-row="nasya"] button.dot').click()   # 2 -> 0
     sync_now(A); sync_now(B)
     check(dot(B, "nasya") == "0" and v3(B)["days"][today]["v"]["nasya"]["n"] == 0, "a cleared value propagates")
+
+    # Avoid habit: clean, then failed later, reaches the other device
+    A.locator('[data-row="nsm"] button.dot').click()      # clean
+    sync_now(A); sync_now(B)
+    check(dot(B, "nsm") == "ok", "avoid clean syncs")
+    A.locator('[data-row="nsm"] button.dot').click()      # failed, later t
+    sync_now(A); sync_now(B)
+    check(dot(B, "nsm") == "x" and v3(B)["days"][today]["v"]["nsm"]["n"] == -1 and rdays()[today]["v"]["nsm"]["n"] == -1,
+          "avoid failed (-1) syncs and wins over the older clean")
 
     # Debounced push, 5 s after the last change
     A.locator('[data-row="nasya"] button.dot').click()

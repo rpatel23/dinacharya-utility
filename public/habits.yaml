@@ -13,6 +13,8 @@
 #   value: mi                    number entry in that unit
 #   min / max                    number → threshold for count/value (max defaults to
 #                                count, min to max) · text → criteria for a check
+#   avoid: true                  something to avoid · tap: blank → clean (green, = min)
+#                                → failed (red) → blank
 #
 # ids key your history: rename `name` freely, keep ids stable.
 # A value with no min/max is logged only, not scored.
@@ -37,7 +39,7 @@ groups:
     ais:    Anti-inflammatory spice
     afo:    Oily fish / avocado
     abw:    Berries / watermelon
-    sff:    Saturated-fat free
+    sff:    {name: Saturated-fat free, avoid: true}
     pcf:    {name: Processed-carb free, min: no refined carbs, max: no refined carbs or sugar}
 
   Training:
@@ -53,7 +55,8 @@ groups:
   Work & study:
     deep:     {name: Deep work, note: "1:30–3:30", days: weekdays, min: 1 hr, max: 2 hr}
     brk:      {name: Screen breaks, note: 20-20-20, days: weekdays, count: 3, min: 2}
-    df:       {name: Distraction-free, days: weekdays}
+    df:       {name: Distraction-free, days: weekdays, avoid: true}
+    nsm:      {name: No social media, avoid: true}
     career:   {name: Career study, days: mon wed sun}
     masters:  {name: Master's, days: sat}
     linkedin: {name: LinkedIn post, days: sun, every: 2, start: 2026-11-22}

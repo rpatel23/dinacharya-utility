@@ -32,6 +32,7 @@ groups:                    # shown in this order
 | `count` | 1–20 | — | Makes the habit a **counter** with that many units. |
 | `show` | `dots`, `one` | `dots` | How a counter is drawn: `dots` is one circle per unit. `one` is a single circle showing a number; tap to add 1, right-click to subtract 1. |
 | `value` | unit text, e.g. `mi` | — | Makes the habit a **number entry** in that unit. |
+| `avoid` | `true` / `false` | `false` | Makes the habit an **avoid** habit: something you try not to do (see Habit kinds). Can't be combined with `count`, `value`, `show`, `min` or `max`. |
 | `min` | number or text | see below | The **min** criterion. |
 | `max` | number or text | see below | The **max** criterion. |
 
@@ -43,9 +44,16 @@ What `min`/`max` mean depends on the kind of habit:
 
 | Kind | Declared by | What you enter | `min` / `max` |
 |---|---|---|---|
-| **check** | no `count` or `value` | One circle that cycles missed → min → max | **Text** describing each level, shown under the name. Optional. |
+| **check** | no `count`, `value` or `avoid` | One circle that cycles missed → min → max | **Text** describing each level, shown under the name. Optional. |
 | **counter** | `count: N` | 0…N units | **Numbers** (thresholds). `max` defaults to `count`, and `min` defaults to `max`. `max` can't be greater than `count`. |
 | **number entry** | `value: unit` | Any number ≥ 0 | **Numbers** (thresholds). With neither set, the habit is **logged only** and not scored. If only one is set, the other defaults to it. |
+| **avoid** | `avoid: true` | One circle that cycles blank → clean (green) → failed (red) → blank | Not allowed. It's pass/fail: clean counts as **min** and never as max. |
+
+```yaml
+nsm:    {name: No social media, avoid: true}        # blank until you mark it: clean or failed
+```
+
+Use **avoid** for things you're trying not to do. Leave it blank until you know how the day went. Mark it **failed** (red) when you slipped, which records the slip instead of looking like you forgot to log it. A check is the better fit when "avoiding" has two levels, such as `pcf` (no refined carbs / also no sugar).
 
 The same habit can be written several ways depending on how you want to enter it:
 
@@ -60,12 +68,12 @@ water:  {name: Water, min: 3 glasses, max: 5 glasses}  # check: you judge the le
 
 Each habit gets a level for each day:
 
-| Level | check | counter / number entry |
-|---|---|---|
-| **max** | You tapped it twice | value ≥ `max` |
-| **min** | You tapped it once | value ≥ `min` |
-| partial | — | 0 < value < `min` (shown pale, counts as missed) |
-| missed | not tapped | 0 |
+| Level | check | counter / number entry | avoid |
+|---|---|---|---|
+| **max** | You tapped it twice | value ≥ `max` | — |
+| **min** | You tapped it once | value ≥ `min` | clean (green) |
+| partial | — | 0 < value < `min` (shown pale, counts as missed) | — |
+| missed | not tapped | 0 | blank, or failed (red) |
 
 - **Day %** is the share of that day's scored habits that reached at least min. The bar also shows how many reached max.
 - **`per_week` habits** don't count toward the day. A day counts toward the weekly target when it reaches at least min. The week counts as min once that reaches `N`, and as max once it reaches `M`. These habits still appear only on their `days`.
@@ -80,6 +88,7 @@ deep:     {name: Deep work, days: weekdays}
 long:     {name: Long run, days: [sun]}
 linkedin: {name: LinkedIn post, days: sun, every: 2, start: 2026-11-22}     # every other Sunday
 tonic:    {name: Carrot–amla tonic, days: weekdays, per_week: 3-4}          # any 3–4 weekdays
+sweets:   {name: No sweets, avoid: true, per_week: 5}                       # clean on at least 5 days
 eyewash:  {name: Eye wash, end: 2026-12-01}                                 # stop, e.g. before surgery
 ```
 
@@ -96,6 +105,7 @@ eyewash:  {name: Eye wash, end: 2026-12-01}                                 # st
 | Retire | Delete the line | Hidden, not deleted. Re-adding the id restores it. |
 | Change thresholds from now on only | Add `end:` to the old habit and create a new id with `start:` | Old days keep their old scoring |
 | Start over | Use a new id | Starts empty |
+| Turn a check into an avoid habit | Add `avoid: true` (and remove `min`/`max`) | Kept: past taps at min or max read as clean |
 
 ## YAML gotchas
 
@@ -120,6 +130,8 @@ The app checks the whole file before using it. Each error names the habit:
 | `x: every needs a start date` | Add `start: YYYY-MM-DD` |
 | `x: use count or value, not both` | Pick one kind |
 | `x: show needs count` | `show` only applies to counters |
+| `x: avoid habits are pass/fail; remove min` | Avoid habits take no `count`, `value`, `show`, `min` or `max` |
+| `x: avoid is true or false` | Write `avoid: true` |
 | `Duplicate id "x"` | Ids must be unique across all groups |
 | `Missing top-level "groups:"` | The file must have a `groups:` key |
 
