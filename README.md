@@ -4,7 +4,9 @@ A minimalist, offline habit tracker in the style of a Windows 98 dev tool. It ru
 
 ## Quick start
 
-Open `public/index.html` in a browser. Your data is saved in the browser automatically. Use **Export…** now and then to keep a backup.
+**Live app:** https://rpatel23.github.io/dinacharya-utility/. Install it to the home screen, then turn on Gist sync in **Settings…** (see `docs/DEPLOYMENT.md` §2.3–2.4).
+
+**Locally:** open `public/index.html` in a browser. Your data is saved in the browser automatically. Use **Export…** now and then to keep a backup.
 
 - **Day view:** tap a circle to cycle missed → min → max. On a counter, tap to set the count, or right-click to subtract.
 - **Week view:** a table of the week with totals per habit. Click a day's header to open that day.
@@ -16,12 +18,16 @@ Open `public/index.html` in a browser. Your data is saved in the browser automat
 ## Docs
 
 - [`docs/CONFIG.md`](docs/CONFIG.md): the `habits.yaml` format
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): running it on all your devices (GitHub Pages + Gist, Cloudflare Pages + Access, or Tailscale + a home box)
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): running it on all your devices. In use: GitHub Pages + Gist. Future migration options: Cloudflare Pages + Access, or Tailscale + a home box
 - [`CLAUDE.md`](CLAUDE.md): constraints and roadmap for development
 
 ## Status
 
-The app works as a standalone file, loads `habits.yaml` from the server, syncs across devices (data format v3, with timestamps for merging), and installs as an app (PWA) when served over HTTPS. The repo includes the Cloudflare Pages Function (`functions/`, `wrangler.toml`) and the Tailscale home-box server (`server/`). A GitHub Actions workflow for Pages is still to do; see the roadmap in CLAUDE.md.
+**MVP complete** (Nov 2026). The app is deployed to GitHub Pages and syncs across devices through a secret Gist. It works as a standalone file, loads `habits.yaml` from the server, syncs with timestamped merging (data format v3), and installs as an app (PWA). Each push to `main` runs the tests and then deploys.
+
+The repo also holds the code for the two future migration options: a Cloudflare Pages Function (`functions/`, `wrangler.toml`) and a Tailscale home-box server (`server/`). Both are tested in CI but not deployed.
+
+Work is tracked in [GitHub Issues](https://github.com/rpatel23/dinacharya-utility/issues).
 
 ## License
 

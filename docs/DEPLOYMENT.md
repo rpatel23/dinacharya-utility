@@ -2,6 +2,8 @@
 
 How to run Daily Tracker on every device you own without running a server for it or making your data public.
 
+> **Current deployment: Option 1.** The app is live at https://rpatel23.github.io/dinacharya-utility/, deployed by `.github/workflows/pages.yml`, and syncs to a secret Gist. Options 2 and 3 are kept as **future migration paths**. Their code is in the repo and tested in CI (`functions/`, `wrangler.toml`, `server/`), but neither is deployed. Section 5 covers how to switch.
+
 All three options use the same app. Only where the files are hosted and where your data is synced changes.
 
 | | Option 1: GitHub Pages + Gist | Option 2: Cloudflare Pages + Access | Option 3: Tailscale + home box |
@@ -15,7 +17,7 @@ All three options use the same app. Only where the files are hosted and where yo
 | Offline use | Yes | Yes | Yes |
 | Sync away from home | Yes | Yes | Only with Tailscale connected |
 
-**Recommendation:** start with Option 1. Move to Option 2 if you want the page and the data to need a login. Option 3 suits you if you already have an always-on box, or want everything to stay on your own network.
+**Recommendation:** start with Option 1 (in use now). Move to Option 2 if you want the page and the data to need a login. Option 3 suits you if you already have an always-on box, or want everything to stay on your own network.
 
 ---
 
@@ -179,9 +181,9 @@ The file format is documented in `CONFIG.md`. This section covers where the file
 
 ---
 
-## 2. Option 1: GitHub Pages + secret Gist
+## 2. Option 1: GitHub Pages + secret Gist (current)
 
-GitHub hosts both the app files and the data. Nothing runs on your side.
+GitHub hosts both the app files and the data. Nothing runs on your side. This is the live deployment: https://rpatel23.github.io/dinacharya-utility/.
 
 ### 2.1 How it fits together
 
@@ -243,7 +245,9 @@ async function push({ id, tok }, data) {
 
 ---
 
-## 3. Option 2: Cloudflare Pages + KV, behind Cloudflare Access
+## 3. Option 2: Cloudflare Pages + KV, behind Cloudflare Access (future)
+
+> **Not deployed.** The code is ready and tested (`node tests/cf_function_test.mjs`), but no Cloudflare account has been set up. Use this section if you migrate off Option 1.
 
 Cloudflare hosts the app and a small sync API. Access sits in front of both, so nothing loads until you've logged in with your email. Cloudflare runs it all, so you don't maintain a server.
 
@@ -327,7 +331,9 @@ The app's adapter also passes `redirect: 'manual'`. Without it, the browser woul
 
 ---
 
-## 4. Option 3: Tailscale + a low-power home box
+## 4. Option 3: Tailscale + a low-power home box (future)
+
+> **Not deployed.** The server is ready and tested (`python tests/server_test.py`), but no home box has been set up. Use this section if you migrate off Option 1.
 
 This is the same setup as running it on your desktop, except a Raspberry Pi, NAS or old laptop stays on instead. Nothing is exposed to the internet, and your data never leaves hardware you own.
 
@@ -389,9 +395,17 @@ This is the same as Option 2's adapter, without the login handling. `fetch('api/
 
 ## 5. Moving between options
 
+To leave Option 1 for Option 2 or 3:
+
 1. In the old deployment, click **Export…** to save a JSON backup.
 2. Deploy the new option and install it on one device.
 3. **Import…** the backup there. Sync pushes it up.
 4. Install the app on your other devices and let them pull.
 
 Copy `public/habits.yaml` along with the other app files. The data format is the same in every option, so you only re-enter sync settings and nothing else changes.
+
+Before you switch, also:
+
+- **Old app install:** the new option has a different URL, so it installs as a separate app. Remove the old Pages app from each device once the new one has synced.
+- **Gist:** set **Settings…** to `/api/data` on each device, then revoke the Gist token. Keep or delete the Gist as a backup.
+- **Pages:** to retire it, disable the **Pages** workflow in the Actions tab, or delete it from `.github/workflows/`. Keep the test job in CI if you still want tests on each push.

@@ -7,6 +7,12 @@ Daily Tracker is a minimalist, offline-first habit tracker for a single user, us
 - `docs/CONFIG.md` is the `habits.yaml` format: options, habit kinds, scoring and validation. It is the spec, and the code must match it.
 - `docs/DEPLOYMENT.md` covers the three supported deployments, the sync model and the PWA setup. Its code snippets are meant as starting points.
 
+## Deployment status
+
+- **Live:** Option 1, GitHub Pages + secret Gist, at https://rpatel23.github.io/dinacharya-utility/. Gist sync is set up on the owner's devices, so treat the stored data format and the Gist payload as production: changes need a migration, and must stay compatible with devices still running the previous version until they update.
+- **Future migration paths:** Option 2 (Cloudflare) and Option 3 (Tailscale). Keep their code and tests working, but they are not deployed.
+- **Work tracking:** GitHub Issues (`gh issue list`). Reference the issue in commits (`Fixes #N`).
+
 ## Constraints (do not break)
 
 - **The app is a single HTML file** (`public/index.html`) holding all its CSS and JS. There is no framework, no bundler and no build step. Opening the file directly from `file://` must still work, with sync turned off.
@@ -52,7 +58,9 @@ tests/
 - **Sync:** settings live in `dailyTracker.sync` (`{mode: 'off'|'gist'|'api', id, tok}`), per device and not synced. `ADAPTERS.gist` / `ADAPTERS.api` implement `pull()`/`push(data)`; the remote payload is `{app, version: 3, days}`. `sync()` always pulls, merges with `mergeDays` (per day and habit, newer `t` wins; ties go to the higher `n`; the note goes by `noteT`, ties to the longer text), saves and re-renders if local changed, and pushes only if the remote differs. It runs on open, on returning to the foreground, on `online`, 5 s after the last `save()` (`PUSH_DELAY`), when going to the background with a push pending, and when the status cell is clicked. One sync runs at a time. `/api/data` requests use `redirect: 'manual'`, so a Cloudflare Access login redirect is reported as `LOGIN` rather than a CORS failure. The status cell (`#s3`) shows `Syncing…`, `Synced HH:MM`, `Offline`, `Sync: sign in` (click reloads) or `Sync error` (detail in its tooltip). `/api/data` is not offered under `file://`; Gist works there.
 - **PWA:** `sw.js` is registered only on http(s). It serves the app shell cache-first (`CACHE = 'tracker-vN'`: **bump it whenever an app file changes** when deploying with Options 2 or 3, or devices keep the old version (the Pages workflow stamps it automatically)), `habits.yaml` network-first, and never touches `/api/` or other origins. A navigation with `?signin` bypasses the cache so the `Sync: sign in` click can reach the Cloudflare Access login; the app then strips `?signin` from the address. Every file in `SHELL` must exist or the install fails (the smoke test checks this).
 
-## Roadmap (build in this order)
+## Roadmap (MVP, complete)
+
+Further work goes in GitHub Issues, not here.
 
 1. ✅ **Load the config from `habits.yaml`** (DEPLOYMENT.md §1.4) — done
    - Fetch `habits.yaml`, network first. Fall back to the last valid cached copy, then to the embedded default. Under `file://`, use the embedded default.
@@ -70,9 +78,9 @@ tests/
 4. ✅ **PWA** (DEPLOYMENT.md §1.2) — done
    - `manifest.webmanifest`, `sw.js` and icons (192, 512, and a 180 apple-touch icon) in the Win98 style.
    - Register the service worker only on http(s).
-5. **Deployment targets**
-   - ✅ Option 2: `functions/api/data.js` and `wrangler.toml` (§3.2) — done; not yet deployed to a real Cloudflare account.
-   - ✅ Option 3: `server/server.py` and `server/tracker.service` (§4.3–4.4) — done.
+5. ✅ **Deployment targets** — done
+   - ✅ Option 2: `functions/api/data.js` and `wrangler.toml` (§3.2). Future option, not deployed.
+   - ✅ Option 3: `server/server.py` and `server/tracker.service` (§4.3–4.4). Future option, not deployed.
    - ✅ Option 1: `.github/workflows/pages.yml` runs all three tests on every push to `main`, then publishes only `public/` to https://rpatel23.github.io/dinacharya-utility/ (Pages source: GitHub Actions). The deploy rewrites `CACHE` in the published `sw.js` to `tracker-<short sha>`, so Pages never needs a manual bump; Options 2 and 3 still do.
 
 ## Testing
