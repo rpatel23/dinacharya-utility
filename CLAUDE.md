@@ -32,16 +32,19 @@ tests/
 ## Current state (v2)
 
 - **Storage:** the `localStorage` key `dailyTracker.v2` holds
-  `{ yaml, days: { 'YYYY-MM-DD': { v: { <id>: number }, note }, … }, lastBackup }`.
+  `{ days: { 'YYYY-MM-DD': { v: { <id>: number }, note }, … }, lastBackup }`.
   The number is a level from 0 to 2 for checks, a unit count for counters, or the entered value for number entries.
-- **Migration:** on first load, data stored under `dailyTracker.v1` is converted automatically (see `migrateV1`).
-- **Config:** `compile(yamlText)` parses with `jsyaml.CORE_SCHEMA`, validates against the CONFIG.md rules, and returns `{ weekStart, groups, all }`. The default config is embedded in `<script type="text/yaml" id="defaultYaml">`, and the **Habits…** dialog edits a copy stored in `localStorage`.
+- **Migration:** on first load, data stored under `dailyTracker.v1` is converted automatically (see `migrateV1`). Older v2 data that still carries a `yaml` field has it removed; if that config differs from the embedded default, it becomes the local override (see `load`).
+- **Config:** `compile(yamlText)` parses with `jsyaml.CORE_SCHEMA`, validates against the CONFIG.md rules, and returns `{ weekStart, groups, all }`. Sources, in order:
+  - `dailyTracker.override`: the per-device local override saved from **Habits…** or a `.yaml` import. Status bar: `Config: local`; **Use deployed** drops it.
+  - `habits.yaml`, fetched with `cache: 'no-cache'` after the first render (`fetchConfig`), only on http(s). A valid file is cached (LF line endings) under `dailyTracker.deployed`; an invalid one keeps the cached copy and shows `Config error: …` in the status bar and the editor.
+  - The embedded default in `<script type="text/yaml" id="defaultYaml">`, always used under `file://` (plus any override). Keep it identical to `public/habits.yaml`.
 - **Views:** Day (fieldsets of rows with circles) and Week (a table with a Wk totals column).
-- **Backup:** Export writes a JSON file with the data and the config. Import accepts a `.json` backup (v1 or v2) or a `.yaml` config.
+- **Backup:** Export writes a JSON file with the data only. Import accepts a `.json` backup (v1 or v2; a `yaml` field in older backups is ignored) or a `.yaml` config, which becomes the local override.
 
 ## Roadmap (build in this order)
 
-1. **Load the config from `habits.yaml`** (DEPLOYMENT.md §1.4)
+1. ✅ **Load the config from `habits.yaml`** (DEPLOYMENT.md §1.4) — done
    - Fetch `habits.yaml`, network first. Fall back to the last valid cached copy, then to the embedded default. Under `file://`, use the embedded default.
    - If the fetched file is invalid, keep the last valid config and show `Config error: …` in the status bar.
    - The Habits… editor becomes a per-device **local override**. While one is active, the status bar shows `Config: local`, and a **Use deployed** button drops it.

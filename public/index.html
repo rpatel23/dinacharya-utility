@@ -64,6 +64,7 @@ table.wk{border-collapse:collapse;width:100%;min-width:360px}
 .status{display:flex;gap:2px;margin-top:6px}
 .status div{flex:1 1 0;min-width:0;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid;border-color:var(--sh) var(--hi) var(--hi) var(--sh)}
 .warn{color:#A00000}
+.status #sCfg.warn{flex-grow:3}
 dialog{padding:3px;width:min(600px,calc(100vw - 16px));background:var(--face);border:2px solid;border-color:var(--lt) var(--dk) var(--dk) var(--lt);box-shadow:inset 1px 1px var(--hi),inset -1px -1px var(--sh)}
 dialog::backdrop{background:rgba(0,0,0,.25)}
 dialog textarea{width:100%;height:60vh;font:11px/1.45 "Lucida Console",Consolas,monospace;white-space:pre;tab-size:2}
@@ -93,7 +94,7 @@ dialog textarea{width:100%;height:60vh;font:11px/1.45 "Lucida Console",Consolas,
   </div>
   <div id="view"></div>
   <div class="key"><span><i></i>missed</span><span><i style="background:var(--part)"></i>partial</span><span><i style="background:var(--min)"></i>min</span><span><i style="background:var(--max)"></i>max</span><span style="color:#606060">right-click a counter to subtract</span></div>
-  <div class="status" role="status"><div id="s1"></div><div id="s2"></div><div id="s3"></div><div id="s4"></div></div>
+  <div class="status" role="status"><div id="s1"></div><div id="s2"></div><div id="s3"></div><div id="s4"></div><div id="sCfg" class="hide"></div></div>
 </main>
 
 <dialog id="dlg" aria-labelledby="dlgT">
@@ -101,7 +102,8 @@ dialog textarea{width:100%;height:60vh;font:11px/1.45 "Lucida Console",Consolas,
   <div style="padding:8px 6px 4px">
     <textarea id="cfg" class="field" spellcheck="false"></textarea>
     <div id="cfgErr" class="warn" style="min-height:16px;margin-top:3px"></div>
-    <div class="bar"><button class="b" id="cfgDef">Defaults</button><button class="b" id="cfgSave">Save .yaml</button><span style="flex:1"></span><button class="b" id="cfgOk" style="min-width:75px">OK</button><button class="b" id="cfgNo" style="min-width:75px">Cancel</button></div>
+    <div id="cfgHint" style="color:#505050"></div>
+    <div class="bar"><button class="b" id="cfgDef">Defaults</button><button class="b" id="cfgSave">Save .yaml</button><button class="b" id="cfgUse" title="Drop the local override">Use deployed</button><span style="display:flex;gap:3px;margin-left:auto"><button class="b" id="cfgOk" style="min-width:75px">OK</button><button class="b" id="cfgNo" style="min-width:75px">Cancel</button></span></div>
   </div>
 </dialog>
 
@@ -184,6 +186,8 @@ groups:
 <script>
 (() => {
 const KEY = 'dailyTracker.v2', OLD = 'dailyTracker.v1';
+const K_DEP = 'dailyTracker.deployed', K_LOCAL = 'dailyTracker.override';   // last valid habits.yaml · per-device override
+const ONLINE = /^https?:$/.test(location.protocol);
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DN = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
@@ -271,8 +275,39 @@ function compile(text){
 }
 
 /* ---------- state ---------- */
-let S = {yaml: DEFAULT_YAML, days: {}, lastBackup: null}, C;
+let S = {days: {}, lastBackup: null}, C;
 let view = 'day', cur = noon(new Date()), storageOK = true, savedAt = null, notice = '';
+
+/* ---------- config source: habits.yaml → cached copy → embedded default; local override on top ---------- */
+let baseYaml = DEFAULT_YAML, localYaml = null, depErr = '', localErr = '';
+const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch(e){} };
+const errLine = e => String((e && e.message) || e).split('\n')[0];
+const lf = t => String(t).replace(/\r\n?/g, '\n');
+function applyConfig(){
+  localErr = '';
+  if (localYaml != null){
+    try { C = compile(localYaml); return; } catch(e){ localErr = errLine(e); }
+  }
+  try { C = compile(baseYaml); } catch(e){ depErr = errLine(e); baseYaml = DEFAULT_YAML; C = compile(DEFAULT_YAML); }
+}
+function setLocal(t){
+  localYaml = t; lsSet(K_LOCAL, t); applyConfig(); notice = ''; render();
+}
+async function fetchConfig(){
+  if (!ONLINE) return;                                  // file:// → embedded default
+  let text;
+  try {
+    const r = await fetch('habits.yaml', {cache: 'no-cache'});
+    if (!r.ok) return;
+    text = lf(await r.text());
+  } catch(e){ return; }                                 // offline → keep the cached copy
+  try { compile(text); } catch(e){ depErr = errLine(e); status(); return; }
+  depErr = '';
+  lsSet(K_DEP, text);
+  if (text !== baseYaml){ baseYaml = text; if (localYaml == null){ applyConfig(); render(); return; } }
+  status();
+}
 
 function migrateV1(old, cfg){
   const days = {};
@@ -291,19 +326,32 @@ function migrateV1(old, cfg){
   return days;
 }
 function load(){
+  if (ONLINE){ const d = lsGet(K_DEP); if (d) baseYaml = d; }
+  localYaml = lsGet(K_LOCAL);
+  let stored = null, old = null;
   try {
     const r = localStorage.getItem(KEY);
-    if (r) Object.assign(S, JSON.parse(r));
-    else {
-      const o = localStorage.getItem(OLD);
-      if (o){ const old = JSON.parse(o); S.days = migrateV1(old, compile(S.yaml)); S.lastBackup = old.lastBackup || null; notice = 'Migrated v1 data'; save(); }
-    }
+    if (r) stored = JSON.parse(r);
+    else { const o = localStorage.getItem(OLD); if (o) old = JSON.parse(o); }
   } catch(e){ storageOK = false; }
-  try { C = compile(S.yaml); } catch(e){ notice = 'Config error – defaults used'; C = compile(DEFAULT_YAML); }
+  // Config used to be saved with the data. An edited one becomes this device's local override.
+  if (stored && typeof stored.yaml === 'string'){
+    const y = lf(stored.yaml);
+    if (localYaml == null && y.trim() !== DEFAULT_YAML.trim()){
+      try { compile(y); localYaml = y; lsSet(K_LOCAL, y); } catch(e){}
+    }
+  }
+  applyConfig();
+  if (stored){
+    S.days = stored.days; S.lastBackup = stored.lastBackup ?? null;
+    if ('yaml' in stored) save();
+  } else if (old){
+    S.days = migrateV1(old, C); S.lastBackup = old.lastBackup || null; notice = 'Migrated v1 data'; save();
+  }
   if (!S.days || typeof S.days !== 'object') S.days = {};
 }
 function save(){
-  try { localStorage.setItem(KEY, JSON.stringify(S)); savedAt = new Date(); storageOK = true; }
+  try { localStorage.setItem(KEY, JSON.stringify({days: S.days, lastBackup: S.lastBackup})); savedAt = new Date(); storageOK = true; }
   catch(e){ storageOK = false; }
 }
 
@@ -457,6 +505,10 @@ function status(){
   const s4 = $('s4'), any = Object.keys(S.days).length > 0;
   if (!S.lastBackup){ s4.textContent = any ? 'No backup yet' : 'Backup: –'; s4.className = any ? 'warn' : ''; }
   else { const d = Math.floor((Date.now() - S.lastBackup) / 864e5); s4.textContent = `Backup ${d ? d + 'd ago' : 'today'}`; s4.className = d > 7 ? 'warn' : ''; }
+  const sc = $('sCfg');
+  const ct = depErr ? `Config error: ${depErr}` : localErr ? `Config error (local): ${localErr}` : localYaml != null ? 'Config: local' : '';
+  sc.textContent = ct; sc.title = ct;
+  sc.className = !ct ? 'hide' : (depErr || localErr) ? 'warn' : '';
 }
 const find = id => C.all.find(x => x.id === id);
 
@@ -521,14 +573,14 @@ $('file').onchange = e => {
   rd.onload = () => {
     try {
       if (/\.ya?ml$/i.test(f.name)){
-        const c = compile(rd.result);
-        if (!confirm(`Replace habits config with ${f.name} (${c.all.length} habits)? Your data is kept.`)) return;
-        S.yaml = rd.result; C = c;
+        const t = lf(rd.result), c = compile(t);
+        if (!confirm(`Use ${f.name} (${c.all.length} habits) as this device's local config? Your data is kept.`)) return;
+        localYaml = t; lsSet(K_LOCAL, t); applyConfig();
       } else {
         const o = JSON.parse(rd.result);
         if (!o || typeof o.days !== 'object') throw new Error('No "days" found in file.');
         if (!confirm(`Replace all data with ${Object.keys(o.days).length} day(s) from ${f.name}?`)) return;
-        if (o.version === 2){ if (o.yaml){ C = compile(o.yaml); S.yaml = o.yaml; } S.days = o.days; }
+        if (o.version === 2) S.days = o.days;           // a config saved in older backups is ignored
         else S.days = migrateV1(o, C);
         S.lastBackup = o.lastBackup || S.lastBackup;
       }
@@ -540,13 +592,24 @@ $('file').onchange = e => {
 
 /* ---------- config editor ---------- */
 const dlg = $('dlg');
-$('edit').onclick = () => { $('cfg').value = S.yaml; $('cfgErr').textContent = ''; dlg.showModal(); };
+$('edit').onclick = () => {
+  const local = localYaml != null;
+  $('cfg').value = local ? localYaml : baseYaml;
+  $('cfgErr').textContent = depErr ? `Deployed habits.yaml: ${depErr}` : localErr ? localErr : '';
+  $('dlgT').textContent = local ? 'habits.yaml (local override)' : 'habits.yaml';
+  $('cfgHint').textContent = local ? 'Used on this device only. Use deployed drops it.'
+    : 'OK saves a local override on this device. To change every device, Save .yaml and commit it.';
+  $('cfgUse').classList.toggle('hide', !local);
+  dlg.showModal();
+};
 $('cfgNo').onclick = () => dlg.close();
 $('cfgDef').onclick = () => { $('cfg').value = DEFAULT_YAML; $('cfgErr').textContent = ''; };
 $('cfgSave').onclick = () => download('habits.yaml', $('cfg').value, 'text/yaml');
+$('cfgUse').onclick = () => { dlg.close(); setLocal(null); };
 $('cfgOk').onclick = () => {
-  try { C = compile($('cfg').value); S.yaml = $('cfg').value; notice = ''; save(); dlg.close(); render(); }
-  catch(err){ $('cfgErr').textContent = err.message.split('\n')[0]; }
+  const t = lf($('cfg').value);
+  try { compile(t); } catch(err){ $('cfgErr').textContent = errLine(err); return; }
+  dlg.close(); setLocal(t === baseYaml ? null : t);
 };
 $('cfg').addEventListener('keydown', e => {
   if (e.key === 'Tab'){ e.preventDefault(); const t = e.target, s = t.selectionStart; t.setRangeText('  ', s, t.selectionEnd, 'end'); }
@@ -555,6 +618,7 @@ $('cfg').addEventListener('keydown', e => {
 load();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 render();
+fetchConfig();
 setInterval(status, 60000);
 })();
 </script>
