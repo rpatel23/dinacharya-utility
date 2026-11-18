@@ -102,12 +102,15 @@ eyewash:  {name: Eye wash, end: 2026-12-01}                                 # st
 
 ## Changing habits safely
 
+The common cases are below. Every kind of change, what it does to history and to devices that haven't updated, and when to split a habit, are covered in [`CONFIG-CHANGES.md`](CONFIG-CHANGES.md).
+
 | You want to | Do this | Effect on history |
 |---|---|---|
 | Rename | Change `name` | Kept |
 | Move to another group | Move the line | Kept |
 | Retire | Delete the line | Hidden, not deleted. Re-adding the id restores it. |
 | Change thresholds from now on only | Add `end:` to the old habit and create a new id with `start:` | Old days keep their old scoring |
+| Change the kind (e.g. check → counter) or a number's unit | Split, as above. Only check ↔ avoid is safe in place. | Old values would be misread |
 | Start over | Use a new id | Starts empty |
 | Turn a check into an avoid habit | Add `avoid: true` (and remove `min`/`max`) | Kept: past taps at min or max read as clean |
 

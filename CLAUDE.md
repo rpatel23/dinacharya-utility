@@ -5,6 +5,7 @@ Daily Tracker is a minimalist, offline-first habit tracker for a single user, us
 ## Read first
 
 - `docs/CONFIG.md` is the `habits.yaml` format: options, habit kinds, scoring and validation. It is the spec, and the code must match it.
+- `docs/CONFIG-CHANGES.md` covers what each kind of `habits.yaml` edit does to stored data, past scores and devices that haven't updated, plus the spike #4 decisions: score with the current config, allow only safe kind changes in place (check ↔ avoid, max text, `count`), split the rest, and never rewrite stored data. Check it before changing an existing habit or adding a config option.
 - `docs/DEPLOYMENT.md` covers the three supported deployments, the sync model and the PWA setup. Its code snippets are meant as starting points.
 
 ## Deployment status
@@ -38,6 +39,7 @@ tools/
   make_icons.py   renders the three PNG icons from one SVG (Playwright)
 docs/
   CONFIG.md       habits.yaml reference
+  CONFIG-CHANGES.md  what each habits.yaml change does to history and devices (spike #4)
   DEPLOYMENT.md   deployment options 1–3, sync model, PWA
 tests/
   smoke_test.py   Playwright smoke test
