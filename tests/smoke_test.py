@@ -4,6 +4,8 @@ import http.server
 import json
 import pathlib
 import re
+import shutil
+import tempfile
 import threading
 from playwright.sync_api import sync_playwright
 
@@ -521,6 +523,87 @@ with sync_playwright() as p:
     wp.wait_for_selector('[data-row="nasya"]')
     check(wp.evaluate("location.search") == "", "app strips ?signin from the address")
     ctx.close()
+
+    # ---------- updates reach an open app (issue #7) ----------
+    # Served like GitHub Pages (max-age=600), so a new build must bypass the HTTP cache to install.
+    tmp = pathlib.Path(tempfile.mkdtemp()) / "site"
+    shutil.copytree(PUBLIC, tmp)
+
+    class PagesHandler(QuietHandler):
+        def end_headers(self):
+            self.send_header("Cache-Control", "max-age=600")
+            super().end_headers()
+
+    def deploy(tag):
+        for f, rx, rep in (("sw.js", r"const CACHE = '[^']*';", f"const CACHE = 'tracker-{tag}';"),
+                           ("index.html", r"const BUILD = '[^']*';", f"const BUILD = '{tag}';")):
+            fp = tmp / f
+            fp.write_text(re.sub(rx, rep, fp.read_text(encoding="utf-8")), encoding="utf-8")
+
+    usrv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(PagesHandler, directory=str(tmp)))
+    threading.Thread(target=usrv.serve_forever, daemon=True).start()
+    UBASE = f"http://127.0.0.1:{usrv.server_port}/"
+
+    def build(page):
+        page.click("#set"); t = page.inner_text("#build"); page.click("#sNo")
+        return t
+
+    def check_for_update(page):           # what resuming the app does
+        page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+
+    deploy("A")
+    uctx = browser.new_context(viewport={"width": 420, "height": 900})
+    up = uctx.new_page()
+    up.on("pageerror", lambda e: errors.append(str(e)))
+    navs = []
+    up.on("framenavigated", lambda f: f == up.main_frame and navs.append(f.url))
+    up.goto(UBASE)
+    up.wait_for_function("navigator.serviceWorker.controller")
+    up.wait_for_timeout(1500)
+    check(len(navs) == 1 and build(up) == "Build A", "first install takes control without a reload")
+
+    deploy("B")
+    with up.expect_navigation():
+        check_for_update(up)
+    up.wait_for_selector('[data-row="nasya"]')
+    check(build(up) == "Build B", "a new build reaches the open page on resume, without closing it")
+
+    deploy("C")
+    up.click("#note")
+    n = len(navs)
+    check_for_update(up)
+    up.wait_for_function("caches.has('tracker-C')")
+    up.wait_for_timeout(1500)
+    check(len(navs) == n, "update waits while a field has focus")
+    with up.expect_navigation():
+        up.evaluate("document.activeElement.blur()")
+    up.wait_for_selector('[data-row="nasya"]')
+    check(build(up) == "Build C", "update applies when the field loses focus")
+
+    deploy("D")
+    up.click("#edit")
+    n = len(navs)
+    check_for_update(up)
+    up.wait_for_function("caches.has('tracker-D')")
+    up.wait_for_timeout(1500)
+    check(len(navs) == n and up.is_visible("#dlg"), "update waits while a dialog is open")
+    with up.expect_navigation():
+        up.click("#cfgNo")
+    up.wait_for_selector('[data-row="nasya"]')
+    check(build(up) == "Build D", "update applies when the dialog closes")
+    n = len(navs)
+    up.wait_for_timeout(2500)
+    check_for_update(up)
+    up.wait_for_timeout(1500)
+    check(len(navs) == n and build(up) == "Build D", "no reload loop when nothing new is deployed")
+    check(up.evaluate("caches.keys()") == ["tracker-D"], "old build caches are removed")
+    uctx.set_offline(True)
+    up.reload()
+    up.wait_for_selector('[data-row="nasya"]')
+    check(build(up) == "Build D", "offline: the new build opens from the cache")
+    uctx.close()
+    usrv.shutdown()
+    shutil.rmtree(tmp.parent, ignore_errors=True)
 
     srv.shutdown()
 

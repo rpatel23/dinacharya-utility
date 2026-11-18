@@ -1,15 +1,19 @@
 // Daily Tracker service worker: serves the app from its cache so it opens offline.
-// Bump CACHE on every deploy that changes an app file (habits.yaml doesn't need it).
+// Bump CACHE on every deploy that changes an app file (habits.yaml doesn't need it). The Pages workflow stamps it.
+// A new build takes over as soon as it's installed (skipWaiting + clients.claim); the page then reloads itself
+// once it's idle. Without this, an installed app that's only ever backgrounded would keep the old build (#7).
 const CACHE = 'tracker-v1';
 const SHELL = ['./', './index.html', './habits.yaml', './manifest.webmanifest',
                './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e =>
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))));
+  // cache: 'reload' skips the HTTP cache (Pages sends max-age=600), so a new build never caches the old files.
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting())));
 
 self.addEventListener('activate', e =>
   e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))));
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);

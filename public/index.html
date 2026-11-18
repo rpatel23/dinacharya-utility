@@ -133,7 +133,7 @@ dialog textarea{width:100%;height:60vh;font:11px/1.45 "Lucida Console",Consolas,
       <div class="hint" id="apiHint">Cloudflare or Tailscale deployment</div>
     </fieldset>
     <div id="sErr" class="warn" style="min-height:16px;margin-top:3px"></div>
-    <div class="bar"><span style="display:flex;gap:3px;margin-left:auto"><button class="b" id="sOk" style="min-width:75px">OK</button><button class="b" id="sNo" style="min-width:75px">Cancel</button></span></div>
+    <div class="bar"><span id="build" style="color:#606060;font-size:11px"></span><span style="display:flex;gap:3px;margin-left:auto"><button class="b" id="sOk" style="min-width:75px">OK</button><button class="b" id="sNo" style="min-width:75px">Cancel</button></span></div>
   </div>
 </dialog>
 
@@ -224,6 +224,7 @@ groups:
 const KEY = 'dailyTracker.v3', V2 = 'dailyTracker.v2', OLD = 'dailyTracker.v1';
 const K_DEP = 'dailyTracker.deployed', K_LOCAL = 'dailyTracker.override';   // last valid habits.yaml · per-device override
 const ONLINE = /^https?:$/.test(location.protocol);
+const BUILD = 'dev';            // the Pages workflow stamps the commit here (shown in Settings…)
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DN = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
@@ -796,14 +797,14 @@ async function sync(){
     syncState = e.message === 'LOGIN' ? 'login' : (e instanceof TypeError || !navigator.onLine) ? 'offline' : 'error';
   }
   syncing = false; status();
-  if (again){ again = false; sync(); }
+  if (again){ again = false; sync(); } else applyUpdate();   // an update deferred during the sync
 }
 $('view').addEventListener('focusout', () => { if (pendingRender){ pendingRender = false; setTimeout(render, 0); } });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') sync();     // back in the foreground: pull
-  else if (pushTimer) sync();                             // going to the background: push now
+  if (document.visibilityState === 'visible'){ sync(); checkUpdate(); }   // back in the foreground: pull
+  else { if (pushTimer) sync(); applyUpdate(); }                          // going to the background: push now
 });
-window.addEventListener('online', () => sync());
+window.addEventListener('online', () => { sync(); checkUpdate(); });
 $('s3').addEventListener('click', () => {
   if (SY.mode === 'off') return;
   // ?signin makes the service worker let this load reach the network, so Access can show its login page.
@@ -818,6 +819,7 @@ function syncSettingsUi(){
 }
 radios.forEach(r => r.addEventListener('change', syncSettingsUi));
 $('set').onclick = () => {
+  $('build').textContent = 'Build ' + BUILD;
   radios.forEach(r => { r.checked = r.value === SY.mode; });
   const api = radios.find(r => r.value === 'api');
   api.disabled = !ONLINE;
@@ -838,7 +840,28 @@ $('sOk').onclick = () => {
 };
 
 /* ---------- PWA ---------- */
-if (ONLINE && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+// A new build's service worker takes control as soon as it's installed (sw.js). Reload into it once the page is
+// idle: never while a dialog is open, a field has focus or a sync is running. Data is saved on every input, and
+// the reload's sync pushes anything still pending. Resuming from the background isn't a navigation, so check then.
+let swReg = null, updateReady = false, lastCheck = 0;
+function checkUpdate(){
+  if (!swReg || Date.now() - lastCheck < 60000) return;
+  lastCheck = Date.now(); swReg.update().catch(() => {});
+}
+function applyUpdate(){
+  const a = document.activeElement;
+  if (!updateReady || syncing || document.querySelector('dialog[open]') || (a && a.matches('input, textarea, select'))) return;
+  updateReady = false; location.reload();
+}
+if (ONLINE && 'serviceWorker' in navigator){
+  let controlled = !!navigator.serviceWorker.controller;   // the first install claiming this page isn't an update
+  navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (controlled){ updateReady = true; applyUpdate(); } else controlled = true;
+  });
+  document.addEventListener('focusout', () => setTimeout(applyUpdate, 0));
+  for (const d of document.querySelectorAll('dialog')) d.addEventListener('close', () => setTimeout(applyUpdate, 0));
+}
 if (/[?&]signin=/.test(location.search)) history.replaceState(null, '', location.pathname);
 
 load();

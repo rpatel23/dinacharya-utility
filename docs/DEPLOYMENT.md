@@ -93,11 +93,12 @@ const SHELL = ['./', './index.html', './habits.yaml', './manifest.webmanifest',
                './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e =>
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting())));     // take over as soon as installed
 
 self.addEventListener('activate', e =>
   e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))));
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
@@ -131,7 +132,9 @@ The shipped app registers the worker from its main script, and only when served 
 
 `crossorigin="use-credentials"` matters only for Option 2. Behind Cloudflare Access, the browser has to send your login cookie when it fetches the manifest, or the install fails. It does no harm in the other options.
 
-**Updating the app:** change the `CACHE` name (`tracker-v2`, and so on) and deploy. Devices download the new version in the background and switch to it the next time the app opens. Close it fully and reopen it if you want the update right away.
+**Updating the app:** change the `CACHE` name (`tracker-v2`, and so on) and deploy. The Pages workflow does this for you. Devices check for a new version when the app opens and whenever it comes back to the foreground. The new version downloads in the background (bypassing the browser's HTTP cache, since Pages sends `max-age=600`) and takes over right away. The page then reloads itself once it's idle: never while a dialog is open, a field has focus or a sync is running. **Settings…** shows the running build (`Build <sha>` on Pages, `Build dev` elsewhere), so you can check which version a device is on.
+
+Without `skipWaiting()`/`clients.claim()` and the reload, a new version waits until every window of the app is closed. An installed app that's only ever sent to the background would then keep the old version indefinitely (#7).
 
 ### 1.3 Installing it on your devices
 
@@ -199,7 +202,7 @@ phone/laptop ──HTTPS──▶ <you>.github.io/daily-tracker      (app files,
 3. Push to `main`, or run the **Pages** workflow from the **Actions** tab. `.github/workflows/pages.yml` runs the tests, then publishes only `public/`.
 4. A couple of minutes later the site is live at `https://<you>.github.io/<repo>/`, with HTTPS included.
 
-To update it, push a commit. Each push to `main` is tested and then deployed, and a failing test stops the deploy. The workflow names the service worker's cache after the commit (`tracker-<sha>`), so you don't bump `CACHE` by hand for Pages. Edits to `habits.yaml` made on github.com go through the same workflow.
+To update it, push a commit. Each push to `main` is tested and then deployed, and a failing test stops the deploy. The workflow names the service worker's cache after the commit (`tracker-<sha>`) and stamps the same id into the app (`BUILD`, shown in **Settings…**), so you don't bump `CACHE` by hand for Pages. Edits to `habits.yaml` made on github.com go through the same workflow.
 
 ### 2.3 Create the data Gist
 

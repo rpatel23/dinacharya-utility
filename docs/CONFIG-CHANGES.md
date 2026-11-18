@@ -62,9 +62,9 @@ water2:  {name: Water, count: 8, min: 6, start: 2026-12-01}
 
 ## Devices on different versions
 
-The app (through the service worker) and `habits.yaml` (through fetch) update separately. Usually the config arrives on the first open after a deploy, and the new app only on the open after that.
+The app (through the service worker) and `habits.yaml` (through fetch) update separately. The config arrives whenever the app opens. The app checks for a new build on open and on every return to the foreground. A new build installs in the background and takes over straight away, and the page reloads itself once it's idle (no dialog open, no field focused, no sync running). The gap is usually seconds. Before #7, an installed app that was only ever backgrounded could keep an old build for days.
 
-- **A new option reaching an old app** (e.g. `avoid` before #2 was installed): the old app rejects the whole file, keeps the last valid config and shows `Config error`. That fixes itself on the next open. No data is lost. **Accepted.**
+- **A new option reaching an old app** (e.g. `avoid` before #2 was installed): the old app rejects the whole file, keeps the last valid config and shows `Config error`. That fixes itself as soon as the new build loads (seconds, see above). No data is lost. **Accepted.**
 - **New behaviour without a new option** (e.g. #3): old and new apps read the same values differently until they update. A tap on the old app can store a value the new app reads differently (e.g. a check tapped to 2), but every rule here keeps that readable. **Accepted.**
 - **Avoid habits on an old app:** a failed day (`-1`) shows as missed, and a tap there clears it. That's a one-day window. **Accepted** (noted in #2).
 - **Sync between devices using different configs:** a merge compares only `t`, never meaning. With one user and configs fetched on open, the window is a single session. **Accepted.**
@@ -91,6 +91,6 @@ Rule for changes: ship a new option in the **same commit** as the app code that 
 | A number entry shows a stored `-1` (e.g. after avoid → number) as "-1" in its box | Fixed in #6: shows blank and scores as missed |
 | Kind changes outside the safe pairs misread old values, and the first tap overwrites them | Documented (split); flagged 🔴 by the change report (#5) |
 | Threshold and schedule changes silently rescore history | Documented; flagged 🟡 by the change report (#5) |
-| An old app rejects a config that uses a new option | Accepted; it fixes itself on the next open |
+| An old app rejects a config that uses a new option | Accepted; it fixes itself when the new build loads (#7) |
 | Sync merges ignore config differences between devices | Accepted |
 | A local override pins a device to an old config | Accepted (decision 5) |

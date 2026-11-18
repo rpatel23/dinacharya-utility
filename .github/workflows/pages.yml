@@ -73,6 +73,9 @@ jobs:
           # without bumping CACHE by hand.
           sed -i -E "s/^const CACHE = '[^']*';/const CACHE = 'tracker-${GITHUB_SHA::7}';/" _site/sw.js
           grep -q "^const CACHE = 'tracker-${GITHUB_SHA::7}';" _site/sw.js
+          # Show the same build id in the app (Settings…), to tell which version a device runs.
+          sed -i -E "s/^const BUILD = '[^']*';/const BUILD = '${GITHUB_SHA::7}';/" _site/index.html
+          grep -q "^const BUILD = '${GITHUB_SHA::7}';" _site/index.html
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
