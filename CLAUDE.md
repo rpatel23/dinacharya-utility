@@ -41,6 +41,7 @@ tools/
 docs/
   CONFIG.md       habits.yaml reference
   CONFIG-CHANGES.md  what each habits.yaml change does to history and devices (spike #4)
+  ROUTINE-BRIEF.md   brief for designing the live habits.yaml with another agent (#8)
   DEPLOYMENT.md   deployment options 1–3, sync model, PWA
 tests/
   smoke_test.py   Playwright smoke test

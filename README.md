@@ -18,6 +18,7 @@ A minimalist, offline habit tracker in the style of a Windows 98 dev tool. It ru
 ## Docs
 
 - [`docs/CONFIG.md`](docs/CONFIG.md): the `habits.yaml` format
+- [`docs/ROUTINE-BRIEF.md`](docs/ROUTINE-BRIEF.md): brief for designing your routine (`habits.yaml`) with an AI agent
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): running it on all your devices. In use: GitHub Pages + Gist. Future migration options: Cloudflare Pages + Access, or Tailscale + a home box
 - [`CLAUDE.md`](CLAUDE.md): constraints and roadmap for development
 
