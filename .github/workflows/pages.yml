@@ -17,18 +17,37 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read          # find the last successful deploy for the habits.yaml report
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0     # the report compares against an earlier commit
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
-      - name: Install Playwright
+      - name: Install Playwright and PyYAML
         run: |
-          pip install playwright
+          pip install playwright pyyaml
           python -m playwright install --with-deps chromium
+      # Non-blocking report of risky habits.yaml changes since the last successful deploy (docs/CONFIG-CHANGES.md).
+      - name: habits.yaml change report
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=$(gh run list --workflow pages.yml --branch main --status success -L 1 --json headSha -q '.[0].headSha' || true)
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then base="$BEFORE"; fi
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then base=$(git rev-parse HEAD~1 2>/dev/null || true); fi
+          git show "$base:public/habits.yaml" > "$RUNNER_TEMP/old.yaml" 2>/dev/null || : > "$RUNNER_TEMP/old.yaml"
+          python tools/config_diff.py "$RUNNER_TEMP/old.yaml" public/habits.yaml --base "$base" --head "$GITHUB_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: habits.yaml change report test
+        run: python tests/config_diff_test.py
       - name: App smoke test
         run: python tests/smoke_test.py
       - name: Server test (Option 3)

@@ -42,6 +42,17 @@ Verdicts:
 | `week_start` | mon → sun | **Rescores** | Week grouping and `per_week` counts change for all history |
 | Use a **new option** (one the app adds) | `avoid` | **Free once the app updates** | See "Devices on different versions" |
 
+## Change report
+
+Each push to `main` compares `public/habits.yaml` with the version from the last successful deploy. If the habits changed, the Pages run's summary page lists 🔴 **Split needed**, 🟡 **Rescores history** and 🟢 **Info** items, using the verdicts above. Free changes aren't listed. The report never blocks the deploy.
+
+To check a change before pushing, run it locally:
+
+```bash
+git show HEAD:public/habits.yaml > /tmp/old.yaml
+python tools/config_diff.py /tmp/old.yaml public/habits.yaml
+```
+
 To keep old scoring when a habit changes, split it:
 
 ```yaml
@@ -78,8 +89,8 @@ Rule for changes: ship a new option in the **same commit** as the app code that 
 |---|---|
 | Lowering `count` shows e.g. `6/4`, and the first tap on a single-circle counter resets it to 0 | Fixed in #6: shows `4/4`; taps act on the shown value |
 | A number entry shows a stored `-1` (e.g. after avoid → number) as "-1" in its box | Fixed in #6: shows blank and scores as missed |
-| Kind changes outside the safe pairs misread old values, and the first tap overwrites them | Documented (split), flagged by CI (#5) |
-| Threshold and schedule changes silently rescore history | Documented; flagged by CI (#5) |
+| Kind changes outside the safe pairs misread old values, and the first tap overwrites them | Documented (split); flagged 🔴 by the change report (#5) |
+| Threshold and schedule changes silently rescore history | Documented; flagged 🟡 by the change report (#5) |
 | An old app rejects a config that uses a new option | Accepted; it fixes itself on the next open |
 | Sync merges ignore config differences between devices | Accepted |
 | A local override pins a device to an old config | Accepted (decision 5) |

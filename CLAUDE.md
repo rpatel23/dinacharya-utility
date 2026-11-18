@@ -37,6 +37,7 @@ server/
   tracker.service Option 3: systemd unit
 tools/
   make_icons.py   renders the three PNG icons from one SVG (Playwright)
+  config_diff.py  Markdown report of risky habits.yaml changes (CI run summary; docs/CONFIG-CHANGES.md)
 docs/
   CONFIG.md       habits.yaml reference
   CONFIG-CHANGES.md  what each habits.yaml change does to history and devices (spike #4)
@@ -85,7 +86,7 @@ Further work goes in GitHub Issues, not here.
 5. ✅ **Deployment targets** — done
    - ✅ Option 2: `functions/api/data.js` and `wrangler.toml` (§3.2). Future option, not deployed.
    - ✅ Option 3: `server/server.py` and `server/tracker.service` (§4.3–4.4). Future option, not deployed.
-   - ✅ Option 1: `.github/workflows/pages.yml` runs all three tests on every push to `main`, then publishes only `public/` to https://rpatel23.github.io/dinacharya-utility/ (Pages source: GitHub Actions). The deploy rewrites `CACHE` in the published `sw.js` to `tracker-<short sha>`, so Pages never needs a manual bump; Options 2 and 3 still do.
+   - ✅ Option 1: `.github/workflows/pages.yml` runs all the tests on every push to `main` (and writes the habits.yaml change report to the run summary, without blocking), then publishes only `public/` to https://rpatel23.github.io/dinacharya-utility/ (Pages source: GitHub Actions). The deploy rewrites `CACHE` in the published `sw.js` to `tracker-<short sha>`, so Pages never needs a manual bump; Options 2 and 3 still do.
 
 ## Testing
 
@@ -94,6 +95,7 @@ pip install playwright     # Chromium may already be installed; otherwise: pytho
 python tests/smoke_test.py        # the app (file:// and http, config, data, sync, PWA)
 python tests/server_test.py       # server/server.py, incl. two devices syncing through it
 node tests/cf_function_test.mjs   # functions/api/data.js against an in-memory KV
+python tests/config_diff_test.py  # tools/config_diff.py (needs pyyaml)
 ```
 
 Extend the smoke test with each roadmap step. At minimum, cover config validation, every habit kind, migrations, and a merge of two diverging copies. Before finishing a UI change, take a screenshot at a width of 420px and check it.
