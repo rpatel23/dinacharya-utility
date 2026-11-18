@@ -9,6 +9,7 @@ It's the outcome of spike #4 (Nov 2026). The decisions are at the end.
 - **Stored data knows only the habit id.** Each day stores `{n, t}` per id, with no kind, unit or threshold. What `n` *means* comes from the current config.
 - **Every day is scored with the current config**, including past days. Changing a threshold or schedule therefore rescores history. Nothing you entered is lost, but past percentages can move.
 - **The app never rewrites stored data.** A config change can make old values read differently, but only a tap rewrites a value, and only for the day you tap.
+- **Values outside the current kind are read clamped.** A counter reads between 0 and `count`, and a number entry reads ≥ 0. Display, scoring and taps all use the clamped value; storage keeps the original (#6).
 - **Config isn't synced.** Each device fetches `habits.yaml` when it opens (network first, falling back to the last valid copy). A device with a local override (**Habits…**) keeps using that until you choose **Use deployed**.
 
 ## Change matrix
@@ -31,7 +32,7 @@ Verdicts:
 | Add / remove `max` | greens (#3) | **Rescores** | Only the max count changes. Day % counts min, so it's unaffected. |
 | Add / remove `max` text on a check | — | **Read-rule** | Without max text, any stored `n ≥ 1` reads as done (#3) |
 | Raise `count` | water 6 → 8 | **Rescores** | Old values keep their unit count; the default min moves with `count` if `min` isn't written. |
-| Lower `count` | water 6 → 4 | **Rescores** | Values above the new count read as full. ⚠ The display shows e.g. `6/4`, and the first tap on a single-circle counter resets it to 0 (#6). |
+| Lower `count` | water 6 → 4 | **Rescores** | Values above the new count read and show as full (`4/4`). Taps act on the shown value, like on any full counter. The stored value stays until you tap. |
 | check → avoid | `sff`, `df` (#2) | **Read-rule** | `n > 0` reads as clean |
 | avoid → check | — | **Read-rule** | Clean reads as done; failed (`-1`) reads as missed. Tapping a failed day sets done. |
 | Any other kind change (check ↔ counter, check ↔ number, counter ↔ number, counter/number → avoid, avoid → counter/number) | water as a check → counter | **Split** | Old values are misread: a done check (2) reads as 2 of 6 units; 1 glass reads as clean; 3.5 mi reads as 4 partial units. The first tap overwrites the old value. |
@@ -75,8 +76,8 @@ Rule for changes: ship a new option in the **same commit** as the app code that 
 
 | Problem | Outcome |
 |---|---|
-| Lowering `count` shows e.g. `6/4`, and the first tap on a single-circle counter resets it to 0 | #6 |
-| A number entry shows a stored `-1` (e.g. after avoid → number) as "-1" in its box | #6 |
+| Lowering `count` shows e.g. `6/4`, and the first tap on a single-circle counter resets it to 0 | Fixed in #6: shows `4/4`; taps act on the shown value |
+| A number entry shows a stored `-1` (e.g. after avoid → number) as "-1" in its box | Fixed in #6: shows blank and scores as missed |
 | Kind changes outside the safe pairs misread old values, and the first tap overwrites them | Documented (split), flagged by CI (#5) |
 | Threshold and schedule changes silently rescore history | Documented; flagged by CI (#5) |
 | An old app rejects a config that uses a new option | Accepted; it fixes itself on the next open |

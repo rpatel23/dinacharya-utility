@@ -425,7 +425,12 @@ function sched(it, d){
   }
   return true;
 }
-const val = (k, it) => { const x = ((S.days[k] || {}).v || {})[it.id]; return +((x && typeof x === 'object') ? x.n : x) || 0; };
+// A stored value can fall outside the current kind after a config change (count lowered, avoid's -1 on a
+// counter or number). Read it clamped for display, scoring and taps; storage is never rewritten (CONFIG-CHANGES.md).
+const val = (k, it) => {
+  const x = ((S.days[k] || {}).v || {})[it.id], n = +((x && typeof x === 'object') ? x.n : x) || 0;
+  return it.kind === 'count' ? Math.max(0, Math.min(it.count, n)) : it.kind === 'value' ? Math.max(0, n) : n;
+};
 function level(it, v){
   if (it.kind === 'avoid') return v > 0 ? 1 : 0;   // clean = min; never max. Failed (n < 0) and blank are missed.
   if (it.kind === 'check') return Math.max(0, Math.min(it.maxText ? 2 : 1, v|0));   // no max text: done or not

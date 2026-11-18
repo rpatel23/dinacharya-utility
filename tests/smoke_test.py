@@ -277,6 +277,42 @@ with sync_playwright() as p:
           and pg.locator('[data-row="water"] button.dot').nth(0).get_attribute("data-s") == "2",
           "habits.yaml: greens has no bonus, water keeps max 6")
 
+    # ---------- out-of-range stored values after a config change (issue #6) ----------
+    CFG6 = ("groups:\n  A:\n    k1: {name: K1, count: 4, min: 3, show: one}\n    k2: {name: K2, count: 4, min: 3}\n"
+            "    k3: {name: K3, count: 3, min: 2, show: one}\n    v1: {name: V1, value: mi}\n    v2: {name: V2, value: mi, min: 1}\n")
+    D6 = {today: {"v": {"k1": {"n": 6, "t": 1}, "k2": {"n": 6, "t": 1}, "k3": {"n": -1, "t": 1}, "v1": {"n": -1, "t": 1}, "v2": {"n": -1, "t": 1}}}}
+    def load6():
+        pg.evaluate("([y, d]) => { localStorage.setItem('dailyTracker.override', y); localStorage.setItem('dailyTracker.v3', JSON.stringify({days: d, lastBackup: null})); }",
+                    [CFG6, D6])
+        pg.reload()
+    stored = lambda id: v3(pg)["days"][today]["v"][id]["n"]
+    load6()
+    k1 = pg.locator('[data-row="k1"]')
+    check(k1.locator(".unit").inner_text() == "4/4" and k1.locator("button.dot").inner_text() == "4" and stored("k1") == 6,
+          "lowered count shows 4/4, stored 6 untouched")
+    check([pg.locator('[data-row="k2"] button.dot').nth(i).get_attribute("data-s") for i in range(4)] == ["1"] * 4, "dots show a full counter")
+    check(pg.locator('[data-row="k3"] .unit').inner_text() == "0/3" and pg.locator('[data-row="k3"] button.dot').inner_text() == "",
+          "negative value on a counter shows 0")
+    check(pg.input_value('[data-row="v1"] input') == "" and pg.input_value('[data-row="v2"] input') == ""
+          and stored("v1") == -1 and stored("v2") == -1, "negative value on a number entry shows blank, stored -1 untouched")
+    check(pg.get_attribute('[data-row="v2"] span.dot', "data-s") == "0", "negative number scores as missed, not partial")
+    pg.click("#vWeek")
+    wk = pg.inner_text(".wk")
+    check("-1" not in wk and pg.inner_text('.wk tr:has(td.it[title="K1"]) .mn') == "4" and
+          pg.inner_text('.wk tr:has(td.it[title="V1"]) td.tot') == "", "week view shows clamped values and no negative total")
+    pg.click("#vDay")
+    pg.locator('[data-row="k1"] button.dot').click()
+    a = stored("k1")
+    load6(); pg.locator('[data-row="k1"] button.dot').click(button="right")
+    b = stored("k1")
+    load6(); pg.locator('[data-row="k2"] button.dot').nth(3).click()
+    c = stored("k2")
+    load6(); pg.locator('[data-row="k3"] button.dot').click()
+    d = stored("k3")
+    check((a, b, c, d) == (0, 3, 3, 1), "taps act on the shown value: full -> 0, right-click -> 3, last dot -> 3, 0 -> 1")
+    pg.evaluate("localStorage.removeItem('dailyTracker.override')")
+    pg.reload()
+
     # ---------- config loading from habits.yaml (served over http) ----------
     srv, BASE = serve_public()
     hp = browser.new_page(viewport={"width": 420, "height": 900}, service_workers="block")
