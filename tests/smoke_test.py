@@ -9,7 +9,25 @@ import tempfile
 import threading
 from playwright.sync_api import sync_playwright
 
-PUBLIC = pathlib.Path(__file__).resolve().parent.parent / "public"
+REAL = pathlib.Path(__file__).resolve().parent.parent / "public"
+FIXTURE = pathlib.Path(__file__).resolve().parent / "fixture_habits.yaml"
+EMBED = re.compile(r'(<script type="text/yaml" id="defaultYaml">\n)(.*?)(</script>)', re.S)
+
+
+def with_config(src, yaml_text):
+    """A temp copy of public/ whose habits.yaml and embedded default are yaml_text."""
+    dst = pathlib.Path(tempfile.mkdtemp(prefix="tracker-fixture-")) / "public"
+    shutil.copytree(src, dst)
+    (dst / "habits.yaml").write_text(yaml_text, encoding="utf-8", newline="\n")
+    html = (dst / "index.html").read_text(encoding="utf-8")
+    html, n = EMBED.subn(lambda m: m.group(1) + yaml_text + m.group(3), html, count=1)
+    assert n == 1, "defaultYaml block not found"
+    (dst / "index.html").write_text(html, encoding="utf-8", newline="\n")
+    return dst
+
+
+# The tests run against the fixture config, so the live public/habits.yaml can change freely.
+PUBLIC = with_config(REAL, FIXTURE.read_text(encoding="utf-8").replace("\r\n", "\n"))
 URL = (PUBLIC / "index.html").as_uri()
 
 
@@ -606,6 +624,21 @@ with sync_playwright() as p:
     shutil.rmtree(tmp.parent, ignore_errors=True)
 
     srv.shutdown()
+
+    # ---------- the live habits.yaml (everything above runs on the fixture) ----------
+    live = (REAL / "habits.yaml").read_text(encoding="utf-8").replace("\r\n", "\n")
+    embedded = EMBED.search((REAL / "index.html").read_text(encoding="utf-8")).group(2)
+    check(embedded == live, "live habits.yaml matches the copy embedded in index.html")
+    lctx = browser.new_context(viewport={"width": 360, "height": 900})
+    lp = lctx.new_page()
+    lp.on("pageerror", lambda e: errors.append(str(e)))
+    lp.goto((REAL / "index.html").as_uri())
+    lp.wait_for_selector("[data-row]")
+    cfg = lp.inner_text("#sCfg") if lp.is_visible("#sCfg") else ""
+    check("error" not in cfg.lower(), "live habits.yaml loads with no Config error")
+    check(lp.evaluate("document.documentElement.scrollWidth <= innerWidth"), "live config fits 360px with no sideways scroll")
+    lctx.close()
+    shutil.rmtree(PUBLIC.parent, ignore_errors=True)
 
     check(not errors, "no page errors")
     browser.close()

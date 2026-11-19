@@ -1,0 +1,80 @@
+# Daily Tracker · habits config v2
+# Test fixture for tests/smoke_test.py (the pre-#8 test routine). Not deployed:
+# the smoke test serves it and embeds it in a temp copy of public/, so the live
+# public/habits.yaml can change freely.
+#
+#   id: Name                     daily check · tap toggles done (min)
+#   id: {name: …, options}
+#
+#   note: text                   hint beside the name
+#   days: mon wed fri            or weekdays | weekend | daily (default)
+#   every: 2                     every N weeks on `days`, counted from `start`
+#   start / end: YYYY-MM-DD      active date range
+#   per_week: 3 | 3-4            flexible target, scored per week (min-max)
+#   count: 6                     counter with 6 units (one circle each)
+#   show: one                    counter as a single circle · tap +1, right-click −1
+#   value: mi                    number entry in that unit
+#   min                          what counts as done · number → threshold for
+#                                count/value (a counter defaults to its count)
+#                                · text → criteria for a check
+#   max                          optional extra credit, only when written · needs
+#                                min for count/value · text makes a check 3-level
+#   avoid: true                  something to avoid · tap: blank → clean (green, = min)
+#                                → failed (red) → blank
+#
+# ids key your history: rename `name` freely, keep ids stable.
+# A value with no min/max is logged only, not scored.
+
+week_start: mon
+
+groups:
+  Morning:
+    eye:    {name: Eye routine, note: wash · exercises · palming}
+    nasya:  Nasya
+    yoga:   {name: Yoga, days: mon tue thu fri}
+    calB:   {name: Calisthenics B, note: upper, days: wed}
+    voice:  {name: Voice, note: straw · varṇamālā, min: 5 min, max: 10 min}
+    comb:   {name: Comb, note: "wide-tooth, dry hair"}
+
+  Nutrition:
+    water:  {name: Water, note: 12 oz, count: 6, min: 4, max: 6}
+    greens: {name: Greens, note: cups, count: 4, min: 3, show: one}
+    amp:    {name: AM protein, note: smoothie}
+    pmp:    {name: PM protein, note: whey}
+    tonic:  {name: Carrot–amla tonic, days: weekdays, per_week: 3-4}
+    ais:    Anti-inflammatory spice
+    afo:    Oily fish / avocado
+    abw:    Berries / watermelon
+    sff:    {name: Saturated-fat free, avoid: true}
+    pcf:    {name: Processed-carb free, min: no refined carbs, max: no refined carbs or sugar}
+
+  Training:
+    calA:   {name: Calisthenics A, note: lower + core, days: mon}
+    track:  {name: Track, days: tue thu}
+    easy:   {name: Easy run, days: wed}
+    calC:   {name: Calisthenics C, note: full body, days: fri}
+    steady: {name: Steady run, days: sat}
+    long:   {name: Long run, days: sun}
+    mob:    {name: Mobility break, note: + palming, days: mon wed fri}
+    miles:  {name: Miles, value: mi}
+
+  Work & study:
+    deep:     {name: Deep work, note: "1:30–3:30", days: weekdays, min: 1 hr, max: 2 hr}
+    brk:      {name: Screen breaks, note: 20-20-20, days: weekdays, count: 3, min: 2, max: 3}
+    df:       {name: Distraction-free, days: weekdays, avoid: true}
+    nsm:      {name: No social media, avoid: true}
+    career:   {name: Career study, days: mon wed sun}
+    masters:  {name: Master's, days: sat}
+    linkedin: {name: LinkedIn post, days: sun, every: 2, start: 2026-11-22}
+    review:   {name: Weekly review, days: sun}
+
+  Evening:
+    trataka:  Trataka
+    scalp:    Scalp massage
+    hoil:     {name: Hair oil, note: bhringraj, days: wed sat}
+    hwash:    {name: Hair wash + rinse, days: thu sun}
+    fenu:     {name: Fenugreek mask, days: sun}
+    pada:     Padabhyanga
+    triphala: Triphala
+    screens:  Screens off 9:30
+    sleep:    Lights out 10:30

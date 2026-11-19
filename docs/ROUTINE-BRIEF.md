@@ -1,14 +1,14 @@
 # Brief: design the live habits.yaml
 
-This brief is for an AI agent (or a person) helping the owner design their real routine for **Daily Tracker**. The output is a `habits.yaml` that drops straight into the app. That work is tracked in issue #8.
+This brief is for an AI agent (or a person) helping the owner design their real routine for **Daily Tracker**. The output is a `habits.yaml` that drops straight into the app. The first live version was designed this way (issue #8); use the brief again for later redesigns.
 
 Attach these files along with this brief:
 
 | File | Why |
 |---|---|
 | [`docs/CONFIG.md`](CONFIG.md) | **The spec.** Every option, the habit kinds, scoring, YAML gotchas and validation errors. Anything not in it is rejected. |
-| [`public/habits.yaml`](../public/habits.yaml) | The current test config, as a worked example. Its header comment summarises the options on one screen. |
-| [`docs/CONFIG-CHANGES.md`](CONFIG-CHANGES.md) | Only if the owner keeps the test data: why ids must stay stable, and when to use a new id. |
+| [`public/habits.yaml`](../public/habits.yaml) | The live config, as a worked example. Its header comment summarises the options on one screen. |
+| [`docs/CONFIG-CHANGES.md`](CONFIG-CHANGES.md) | Whenever existing habits change: why ids must stay stable, and when to use a new id. |
 
 ## What the app is
 
@@ -38,30 +38,23 @@ A minimalist habit tracker in the style of a Windows 98 tool, used on a phone an
 
 - An id is the key the history is stored under. Make it **short, lowercase and meaningful** (`water`, `deep`, `nsm`), and **unique across all groups**.
 - Once tracking starts, an id never changes. Rename with `name` instead, and change kind or unit only by adding a new id (CONFIG-CHANGES.md).
-- If the owner keeps the test data (decision 1 below), reusing a current id means inheriting its test history. Only reuse one when the habit means exactly the same thing.
+- If the owner keeps the history (question 1 below), reusing a current id means inheriting its history. Only reuse one when the habit means exactly the same thing.
 
 ## Questions for the owner
 
 Answer these before drafting. Ask the owner for anything missing rather than guessing.
 
-1. **Test data:** start fresh (suggested), or keep the history under unchanged ids?
+1. **History:** keep it under unchanged ids (the default now that the routine is live), or start fresh?
 2. **Start date:** the first real tracked day.
 3. **The week:** work hours, training plan by day, busy days, and what changes at weekends.
 4. **Goals:** what matters most now, and what's nice to have. (Fewer habits that are actually done beat a long list.)
 5. **Units:** glass or cup size, run distances, what counts as a session (e.g. "deep work = 1 hr").
 6. **Date ranges:** anything that starts later or stops on a date (a programme, a procedure, travel).
-7. **Avoid list:** things being cut out (currently `sff` saturated fat, `df` distraction-free, `nsm` no social media).
-8. **Two-level habits:** which habits have a real "extra" level worth a max (currently Voice, Processed-carb free, Deep work, Water, Screen breaks).
+7. **Avoid list:** things being cut out (currently `sf` added sugar, `nsm` no social media, `er` energy retention).
+8. **Two-level habits:** which habits have a real "extra" level worth a max (currently Eye routine, Hair routine, Water, Meal schedule, Supplements, Deep work, Screen breaks, Hair wash, Reading).
 9. **Flexible habits:** which are "N times a week" rather than fixed days.
 
-The current test routine (`public/habits.yaml`) covers:
-- morning eye/voice practice;
-- an Ayurvedic evening routine;
-- nutrition;
-- training Mon–Sun;
-- work and study blocks.
-
-Its thresholds were guesses: water 4 of 6 (max 6), greens 3 of 4, screen breaks 2 of 3 (max 3), and the LinkedIn post start date. Treat it as a starting point to confirm or replace, not as requirements.
+The live routine (`public/habits.yaml`, first shipped in #8) is the starting point for any redesign. Its thresholds were vetted by the owner, so change one only when the owner asks, and follow CONFIG-CHANGES.md for any habit that already has history.
 
 ## Deliverables
 
@@ -74,4 +67,4 @@ Its thresholds were guesses: water 4 of 6 (max 6), greens 3 of 4, screen breaks 
 
 - **Try it:** paste it into the app's **Habits…** editor. It must load with no `Config error`. The status bar then shows `Config: local`, and **Use deployed** undoes it.
 - **Check the fit:** look at the Day view on a phone. Names shouldn't be cut off, and each group should fit on one screen if possible.
-- **Hand it back:** give the file to the repo (issue #8). The repo checks it, runs the change report (`tools/config_diff.py`), deploys it and handles the data reset.
+- **Hand it back:** give the file to the repo (open an issue for it). The repo checks it, runs the change report (`tools/config_diff.py`), and deploys it.

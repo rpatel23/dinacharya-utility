@@ -1,6 +1,6 @@
 # Daily Tracker
 
-A minimalist, offline habit tracker in the style of a Windows 98 dev tool. It runs as a single HTML file, and a YAML file defines the habits. Each habit gets a daily level of **missed**, **min** or **max**. Habits can be daily checks, counters (for example water: 6 circles, min at 4) or number entries (miles), and each can have its own weekly schedule.
+A minimalist, offline habit tracker in the style of a Windows 98 dev tool. It runs as a single HTML file, and a YAML file defines the habits. Each habit gets a daily level of **missed**, **min** or **max**. Habits can be daily checks, counters (for example water: 5 circles, min at 4) or number entries (miles), and each can have its own weekly schedule.
 
 ## Quick start
 

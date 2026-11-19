@@ -1,4 +1,5 @@
 # Daily Tracker · habits config v2
+# Live routine · first tracked day 2026-11-23 · fresh start (issue #8)
 #
 #   id: Name                     daily check · tap toggles done (min)
 #   id: {name: …, options}
@@ -26,52 +27,50 @@ week_start: mon
 
 groups:
   Morning:
-    eye:    {name: Eye routine, note: wash · exercises · palming}
+    snooze: Zero snooze
+    light:  Morning light
+    abhy:   {name: Abhyanga, per_week: 3}
+    dhyan:  Dhyan
     nasya:  Nasya
-    yoga:   {name: Yoga, days: mon tue thu fri}
-    calB:   {name: Calisthenics B, note: upper, days: wed}
-    voice:  {name: Voice, note: straw · varṇamālā, min: 5 min, max: 10 min}
-    comb:   {name: Comb, note: "wide-tooth, dry hair"}
+    eye:    {name: Eye routine, note: exercises · compress, min: partial, max: all}
+    hair:   {name: Hair routine, min: scalp massage, max: + nail rubbing}
+    voice:  {name: Voice, note: straw · varṇamālā, min: 10 min}
 
   Nutrition:
-    water:  {name: Water, note: 12 oz, count: 6, min: 4, max: 6}
-    greens: {name: Greens, note: cups, count: 4, min: 3, show: one}
-    amp:    {name: AM protein, note: smoothie}
-    pmp:    {name: PM protein, note: whey}
-    tonic:  {name: Carrot–amla tonic, days: weekdays, per_week: 3-4}
-    ais:    Anti-inflammatory spice
-    afo:    Oily fish / avocado
-    abw:    Berries / watermelon
-    sff:    {name: Saturated-fat free, avoid: true}
-    pcf:    {name: Processed-carb free, min: no refined carbs, max: no refined carbs or sugar}
+    water:  {name: Water, note: 20 oz, count: 5, min: 4, max: 5}
+    meals:  {name: Meal schedule, note: "9:30 · 1:00 · 4:30", min: roughly on time, max: on schedule}
+    protein: {name: Protein, note: goal 60–80 g, value: g}
+    supps:  {name: Supplements, note: shilajit · krill oil · pumpkin seed oil, min: partial, max: all}
+    tonic:  {name: Carrot–amla tonic, per_week: 5}
+    sf:     {name: Added-sugar free, avoid: true}
 
   Training:
+    yoga:   Yoga
     calA:   {name: Calisthenics A, note: lower + core, days: mon}
-    track:  {name: Track, days: tue thu}
-    easy:   {name: Easy run, days: wed}
+    calB:   {name: Calisthenics B, note: upper, days: wed}
     calC:   {name: Calisthenics C, note: full body, days: fri}
-    steady: {name: Steady run, days: sat}
-    long:   {name: Long run, days: sun}
-    mob:    {name: Mobility break, note: + palming, days: mon wed fri}
-    miles:  {name: Miles, value: mi}
+    run:    {name: Training run, note: see plan, days: mon tue thu}
+    track:  {name: Track workout, note: tempo / 400s, days: sat}
+    dist:   {name: Distance run, note: see plan, days: sun}
+    miles:  {name: Miles, value: mi, days: mon tue thu sat sun}
+    sauna:  {name: Sauna, per_week: 1}
+    mob:    {name: Mobility routine, per_week: 3}
 
   Work & study:
-    deep:     {name: Deep work, note: "1:30–3:30", days: weekdays, min: 1 hr, max: 2 hr}
+    deep:     {name: Deep work, days: weekdays, min: 2 hr, max: 3 hr}
     brk:      {name: Screen breaks, note: 20-20-20, days: weekdays, count: 3, min: 2, max: 3}
-    df:       {name: Distraction-free, days: weekdays, avoid: true}
     nsm:      {name: No social media, avoid: true}
-    career:   {name: Career study, days: mon wed sun}
-    masters:  {name: Master's, days: sat}
-    linkedin: {name: LinkedIn post, days: sun, every: 2, start: 2026-11-22}
+    er:       {name: Energy retention, avoid: true}
+    career:   {name: Career work, per_week: 3, min: 1 hr session}
     review:   {name: Weekly review, days: sun}
 
   Evening:
-    trataka:  Trataka
-    scalp:    Scalp massage
-    hoil:     {name: Hair oil, note: bhringraj, days: wed sat}
-    hwash:    {name: Hair wash + rinse, days: thu sun}
-    fenu:     {name: Fenugreek mask, days: sun}
-    pada:     Padabhyanga
+    screens:  Screens off 9:00
     triphala: Triphala
-    screens:  Screens off 9:30
+    trataka:  Trataka
+    hoil:     {name: Hair oil, note: bhringraj, per_week: 2}
+    hwash:    {name: Hair wash + rinse, per_week: 2, min: regular, max: herbal}
+    comb:     {name: Comb, note: "wide-tooth, dry hair"}
+    pada:     Padabhyanga
+    read:     {name: Reading, value: pgs, min: 20, max: 30}
     sleep:    Lights out 10:30

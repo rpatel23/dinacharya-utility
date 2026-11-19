@@ -41,10 +41,11 @@ tools/
 docs/
   CONFIG.md       habits.yaml reference
   CONFIG-CHANGES.md  what each habits.yaml change does to history and devices (spike #4)
-  ROUTINE-BRIEF.md   brief for designing the live habits.yaml with another agent (#8)
+  ROUTINE-BRIEF.md   brief for designing habits.yaml with another agent (used for #8)
   DEPLOYMENT.md   deployment options 1–3, sync model, PWA
 tests/
-  smoke_test.py   Playwright smoke test
+  smoke_test.py   Playwright smoke test (runs on fixture_habits.yaml, not the live config)
+  fixture_habits.yaml  the test routine the smoke test uses
 ```
 
 ## Current state (v3)
@@ -103,4 +104,6 @@ Extend the smoke test with each roadmap step. At minimum, cover config validatio
 
 ## Owner context
 
-The routine in `habits.yaml` reflects the owner's Oct 2026 calendar: training on Mon–Sun, eye and voice practice in the mornings, an Ayurvedic evening routine, and work and study blocks. The thresholds for water (4 of 6), greens (3 of 4) and screen breaks (2 of 3), and the LinkedIn post start date, were guesses that the owner may adjust. Water and screen breaks give extra credit (max) for the full count; greens deliberately doesn't.
+`public/habits.yaml` is the owner's **live routine** (first version shipped in #8, first tracked day 2026-11-23, fresh start: the test data is wiped by hand per the reset procedure in #8, emptying the Gist and every device together). Groups: Morning (Ayurvedic and eye/voice/hair practice), Nutrition, Training (calisthenics Mon/Wed/Fri, runs Mon/Tue/Thu, track Sat, distance Sun), Work & study, Evening. The owner vetted every threshold; don't change it without being asked, and follow `docs/CONFIG-CHANGES.md` for any change to an existing habit. `protein` and `miles` are deliberately logged only (no min).
+
+The tests don't use it: `tests/smoke_test.py` runs on `tests/fixture_habits.yaml` (the pre-#8 test routine) in a temp copy of `public/`, and only checks that the live file matches the embedded copy, loads with no Config error and fits 360px.
